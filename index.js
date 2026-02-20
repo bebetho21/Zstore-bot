@@ -6,7 +6,6 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
-  ChannelSelectMenuBuilder,
   ChannelType,
   PermissionsBitField
 } = require('discord.js');
@@ -26,38 +25,34 @@ const CARGO_STAFF_ID = "1464846409139359784";
 
 let produtos = {};
 let ticketCounter = 0;
+let donosTicket = {};
+let embedsPagamentoTicket = {};
 
 let pagamentoPix = {
-  titulo: "Pagamento via Pix",
+  titulo: "",
   qr: "",
   chave: ""
 };
 
-let embedsPagamentoTicket = {};
-let donosTicket = {};
-
-/* ================= READY ================= */
-
 client.once("clientReady", () => {
-  console.log(`✅ Bot online como ${client.user.tag}`);
+  console.log(`✅ Online como ${client.user.tag}`);
 });
-
-/* ================= MENSAGENS ================= */
 
 client.on("messageCreate", async (message) => {
 
-if (message.author.bot) return;
+if(message.author.bot) return;
 
 /* ================= COMANDOS ================= */
 
-if (message.content === "!comandosbot") {
+if(message.content === "!comandosbot"){
 
 const embed = new EmbedBuilder()
-.setTitle("📜 Comandos do Bot")
+.setTitle("📜 Comandos")
 .setDescription(`
 🛠️ Admin:
 !criarproduto
 !enviarproduto
+!cadastrarpix
 
 💳 Pagamento:
 !chave
@@ -71,9 +66,9 @@ const embed = new EmbedBuilder()
 message.channel.send({embeds:[embed]});
 }
 
-/* ================= CRIAR PRODUTO ================= */
+/* ================= CADASTRAR PIX ================= */
 
-if (message.content === "!criarproduto") {
+if(message.content === "!cadastrarpix"){
 
 if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
 return message.reply("❌ Apenas admin");
@@ -85,66 +80,18 @@ const coletado = await message.channel.awaitMessages({filter:filtro,max:1});
 return coletado.first().content;
 };
 
-const nome = await perguntar("📦 Nome do produto:");
-const descricao = await perguntar("📝 Descrição:");
-const imagem = await perguntar("🖼️ URL da imagem:");
-const estoque = await perguntar("📦 Quantidade em estoque:");
+pagamentoPix.titulo = await perguntar("Título:");
+pagamentoPix.qr = await perguntar("URL do QR Code:");
+pagamentoPix.chave = await perguntar("Pix Copia e Cola:");
 
-const planosTexto = await perguntar("💰 Planos (um por linha):");
-
-const planos = planosTexto.split("\n").map((linha,index)=>{
-return {
-label: linha.split("|")[0].trim(),
-description: linha.split("|").slice(1).join("|").trim(),
-value:`plano_${Date.now()}_${index}`
-};
-});
-
-produtos[nome] = {
-nome,
-descricao,
-imagem,
-estoque,
-planos
-};
-
-message.channel.send("✅ Produto criado!");
-}
-
-/* ================= ENVIAR PRODUTO ================= */
-
-if (message.content === "!enviarproduto") {
-
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return;
-
-const menu = new StringSelectMenuBuilder()
-.setCustomId("selecionar_produto")
-.setPlaceholder("📦 Escolha o produto")
-.setMinValues(1)
-.setMaxValues(5)
-.addOptions(
-Object.values(produtos).map(prod=>({
-label: prod.nome,
-description:`Estoque: ${prod.estoque}`,
-value: prod.nome
-}))
-);
-
-const row = new ActionRowBuilder().addComponents(menu);
-
-message.channel.send({
-content:"📦 Escolha:",
-components:[row]
-});
+message.channel.send("✅ Pix cadastrado!");
 }
 
 /* ================= CHAVE PIX ================= */
 
-if (message.content === "!chave") {
+if(message.content === "!chave"){
 
-if (!message.channel.name.includes("ticket-"))
-return;
+if (!message.channel.name.includes("ticket-")) return;
 
 const embed = new EmbedBuilder()
 .setTitle(pagamentoPix.titulo)
@@ -158,11 +105,11 @@ embedsPagamentoTicket[message.channel.id] = msg.id;
 
 /* ================= CONFIRMADO ================= */
 
-if (message.content === "!confirmado") {
+if(message.content === "!confirmado"){
 
 const dono = donosTicket[message.channel.id];
 
-if (
+if(
 message.author.id !== dono &&
 !message.member.roles.cache.has(CARGO_ADMIN_ID) &&
 !message.member.roles.cache.has(CARGO_STAFF_ID)
@@ -173,6 +120,64 @@ if(!msgId)return;
 
 const msg = await message.channel.messages.fetch(msgId);
 if(msg) await msg.delete();
+}
+
+/* ================= CRIAR PRODUTO ================= */
+
+if(message.content === "!criarproduto"){
+
+if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return message.reply("❌ Apenas admin");
+
+const perguntar = async (pergunta) => {
+await message.channel.send(pergunta);
+const filtro = m => m.author.id === message.author.id;
+const coletado = await message.channel.awaitMessages({filter:filtro,max:1});
+return coletado.first().content;
+};
+
+const nome = await perguntar("Nome:");
+const descricao = await perguntar("Descrição:");
+const imagem = await perguntar("URL da imagem:");
+const estoque = await perguntar("Quantidade em estoque:");
+const planosTexto = await perguntar("Planos (1 por linha):");
+
+const planos = planosTexto.split("\n").map((linha,index)=>{
+return {
+label: linha.split("|")[0].trim(),
+description:(linha.split("|").slice(1).join("|").trim() || "Plano disponível").padEnd(5,"."),
+value:`plano_${Date.now()}_${index}`
+};
+});
+
+produtos[nome] = {nome,descricao,imagem,estoque,planos};
+
+message.channel.send("✅ Produto criado!");
+}
+
+/* ================= ENVIAR PRODUTO ================= */
+
+if(message.content === "!enviarproduto"){
+
+if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return;
+
+const menu = new StringSelectMenuBuilder()
+.setCustomId("selecionar_produto")
+.setPlaceholder("Escolha")
+.setMinValues(1)
+.setMaxValues(5)
+.addOptions(
+Object.values(produtos).map(prod=>({
+label: prod.nome,
+description:`Estoque: ${prod.estoque}`,
+value: prod.nome
+}))
+);
+
+const row = new ActionRowBuilder().addComponents(menu);
+
+message.channel.send({content:"📦 Produtos:",components:[row]});
 }
 
 });
@@ -192,7 +197,7 @@ const produto = produtos[produtoNome];
 ticketCounter++;
 
 const canalTicket = await interaction.guild.channels.create({
-name:`🛒・ticket-${ticketCounter}`,
+name:`ticket-${ticketCounter}`,
 type:ChannelType.GuildText,
 permissionOverwrites:[
 {
@@ -222,12 +227,12 @@ donosTicket[canalTicket.id] = interaction.user.id;
 
 const embed = new EmbedBuilder()
 .setTitle("🛒 Pedido Criado")
-.setDescription(`Produto: ${produto.nome}\nEstoque: ${produto.estoque}`)
+.setDescription(`Produto: ${produto.nome}`)
 .setColor("Green");
 
 const rowTicket = new ActionRowBuilder().addComponents(
 new ButtonBuilder()
-.setLabel("🔗 Ir para o Ticket")
+.setLabel("🔗 Ir para Ticket")
 .setStyle(ButtonStyle.Link)
 .setURL(`https://discord.com/channels/${interaction.guild.id}/${canalTicket.id}`),
 
