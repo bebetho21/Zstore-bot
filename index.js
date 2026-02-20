@@ -20,7 +20,7 @@ const client = new Client({
   ]
 });
 
-const TOKEN = "";
+const TOKEN = process.env.TOKEN;
 const CARGO_ADMIN_ID = "1464846406450942065";
 const CARGO_STAFF_ID = "1464846409139359784";
 
