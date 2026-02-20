@@ -24,11 +24,8 @@ const client = new Client({
   ]
 });
 
-const TOKEN = "";
 const CARGO_ADMIN_ID = "1464846406450942065";
 const CARGO_STAFF_ID = "1464846409139359784";
-
-/* ================= CARREGAR PRODUTOS ================= */
 
 let produtos = {};
 let ticketCounter = 0;
@@ -41,13 +38,9 @@ function salvarProdutos() {
   fs.writeFileSync(PRODUTOS_PATH, JSON.stringify(produtos, null, 2));
 }
 
-/* ================= READY ================= */
-
 client.once("clientReady", () => {
   console.log(`✅ Bot online como ${client.user.tag}`);
 });
-
-/* ================= CRIAR PRODUTO ================= */
 
 client.on("messageCreate", async (message) => {
 
@@ -83,12 +76,9 @@ client.on("messageCreate", async (message) => {
       planos
     };
 
-    salvarProdutos(); // 🔥 SALVA NO JSON
-
+    salvarProdutos();
     message.channel.send("✅ Produto criado com sucesso!");
   }
-
-  /* ================= ENVIAR PRODUTO ================= */
 
   if (message.content === "!enviarproduto") {
 
@@ -119,11 +109,7 @@ client.on("messageCreate", async (message) => {
 
 });
 
-/* ================= INTERAÇÕES ================= */
-
 client.on("interactionCreate", async (interaction) => {
-
-  /* ===== Selecionar Produto ===== */
 
   if (interaction.isStringSelectMenu()) {
 
@@ -144,8 +130,6 @@ client.on("interactionCreate", async (interaction) => {
         ephemeral: true
       });
     }
-
-    /* ===== Comprar Plano ===== */
 
     if (interaction.customId.startsWith("menu_compra_")) {
 
@@ -223,8 +207,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  /* ===== Selecionar Canal ===== */
-
   if (interaction.isChannelSelectMenu()) {
 
     const nomeProduto = interaction.customId.replace("selecionar_canal_", "");
@@ -260,8 +242,6 @@ client.on("interactionCreate", async (interaction) => {
       components: []
     });
   }
-
-  /* ===== Fechar Ticket ===== */
 
   if (interaction.isButton()) {
 
