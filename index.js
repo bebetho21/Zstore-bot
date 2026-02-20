@@ -15,6 +15,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent
   ]
 });
@@ -27,12 +28,13 @@ let produtos = {};
 let ticketCounter = 0;
 
 let pagamentoPix = {
-  titulo: "",
+  titulo: "Pagamento via Pix",
   qr: "",
   chave: ""
 };
 
 let embedsPagamentoTicket = {};
+let donosTicket = {};
 
 /* ================= READY ================= */
 
@@ -44,320 +46,226 @@ client.once("clientReady", () => {
 
 client.on("messageCreate", async (message) => {
 
-  if (message.author.bot) return;
+if (message.author.bot) return;
 
-  /* ================= CRIAR PRODUTO ================= */
+/* ================= COMANDOS ================= */
 
-  if (message.content === "!criarproduto") {
+if (message.content === "!comandosbot") {
 
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply("❌ Apenas administradores.");
-
-    const perguntar = async (pergunta) => {
-      await message.channel.send(pergunta);
-      const filtro = m => m.author.id === message.author.id;
-      const coletado = await message.channel.awaitMessages({ filter: filtro, max: 1 });
-      return coletado.first().content;
-    };
-
-    const nome = await perguntar("📦 Nome do produto:");
-    const descricao = await perguntar("📝 Descrição:");
-    const imagem = await perguntar("🖼️ URL da imagem:");
-    const planosTexto = await perguntar("💰 Planos (um por linha):");
-
-    const planos = planosTexto.split("\n").map((linha, index) => {
-      return {
-        label: linha.split("|")[0].trim(),
-        description: linha.split("|").slice(1).join("|").trim(),
-        value: `plano_${Date.now()}_${index}`
-      };
-    });
-
-    produtos[nome] = {
-      nome,
-      descricao,
-      imagem,
-      planos
-    };
-
-    message.channel.send("✅ Produto criado com sucesso!");
-  }
-
-  /* ================= ENVIAR PRODUTO ================= */
-
-  if (message.content === "!enviarproduto") {
-
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return;
-
-    if (Object.keys(produtos).length === 0)
-      return message.reply("❌ Nenhum produto criado.");
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("selecionar_produto")
-      .setPlaceholder("📦 Escolha o produto")
-      .addOptions(
-        Object.values(produtos).map(prod => ({
-          label: prod.nome,
-          description: prod.descricao.slice(0, 100),
-          value: prod.nome
-        }))
-      );
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({
-      content: "📦 Selecione o produto:",
-      components: [row]
-    });
-  }
-
-  /* ================= CADASTRAR PIX ================= */
-
-  if (message.content === "!cadastrarchave") {
-
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply("❌ Apenas administradores.");
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("menu_pix_config")
-      .setPlaceholder("Configurar pagamento")
-      .addOptions([
-        { label: "Criar Título", value: "titulo" },
-        { label: "Colocar Foto QR Code", value: "qr" },
-        { label: "Chave Pix Copia e Cola", value: "chave" }
-      ]);
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({
-      content: "⚙️ Configure o pagamento Pix:",
-      components: [row]
-    });
-  }
-
-  /* ================= ENVIAR PIX ================= */
-
-  if (message.content === "!chave") {
-
-    if (!message.channel.name.includes("ticket-"))
-      return message.reply("❌ Use dentro do ticket.");
-
-    const embed = new EmbedBuilder()
-      .setTitle(pagamentoPix.titulo || "Pagamento Pix")
-      .setDescription(`💰 **Chave Pix:**\n\`\`\`\n${pagamentoPix.chave}\n\`\`\``)
-      .setImage(pagamentoPix.qr)
-      .setColor("Yellow");
-
-    const msg = await message.channel.send({
-      embeds: [embed]
-    });
-
-    embedsPagamentoTicket[message.channel.id] = msg.id;
-  }
-
-  /* ================= CONFIRMADO ================= */
-
-  if (message.content === "!confirmado") {
-
-    if (!message.channel.name.includes("ticket-"))
-      return;
-
-    const msgId = embedsPagamentoTicket[message.channel.id];
-    if (!msgId) return;
-
-    const msg = await message.channel.messages.fetch(msgId);
-    if (msg) await msg.delete();
-  }
-
-  /* ================= COMANDOS ================= */
-
-  if (message.content === "!comando") {
-
-    const embed = new EmbedBuilder()
-      .setTitle("📜 Comandos do Bot")
-      .setDescription(`
-🛠️ **Admin**
+const embed = new EmbedBuilder()
+.setTitle("📜 Comandos do Bot")
+.setDescription(`
+🛠️ Admin:
 !criarproduto
 !enviarproduto
-!cadastrarchave
 
-💳 **Pagamento**
+💳 Pagamento:
 !chave
 !confirmado
 
-📋 **Sistema**
-!comando
-      `)
-      .setColor("Blue");
+📋 Sistema:
+!comandosbot
+`)
+.setColor("Blue");
 
-    message.channel.send({ embeds: [embed] });
-  }
+message.channel.send({embeds:[embed]});
+}
+
+/* ================= CRIAR PRODUTO ================= */
+
+if (message.content === "!criarproduto") {
+
+if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return message.reply("❌ Apenas admin");
+
+const perguntar = async (pergunta) => {
+await message.channel.send(pergunta);
+const filtro = m => m.author.id === message.author.id;
+const coletado = await message.channel.awaitMessages({filter:filtro,max:1});
+return coletado.first().content;
+};
+
+const nome = await perguntar("📦 Nome do produto:");
+const descricao = await perguntar("📝 Descrição:");
+const imagem = await perguntar("🖼️ URL da imagem:");
+const estoque = await perguntar("📦 Quantidade em estoque:");
+
+const planosTexto = await perguntar("💰 Planos (um por linha):");
+
+const planos = planosTexto.split("\n").map((linha,index)=>{
+return {
+label: linha.split("|")[0].trim(),
+description: linha.split("|").slice(1).join("|").trim(),
+value:`plano_${Date.now()}_${index}`
+};
+});
+
+produtos[nome] = {
+nome,
+descricao,
+imagem,
+estoque,
+planos
+};
+
+message.channel.send("✅ Produto criado!");
+}
+
+/* ================= ENVIAR PRODUTO ================= */
+
+if (message.content === "!enviarproduto") {
+
+if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return;
+
+const menu = new StringSelectMenuBuilder()
+.setCustomId("selecionar_produto")
+.setPlaceholder("📦 Escolha o produto")
+.setMinValues(1)
+.setMaxValues(5)
+.addOptions(
+Object.values(produtos).map(prod=>({
+label: prod.nome,
+description:`Estoque: ${prod.estoque}`,
+value: prod.nome
+}))
+);
+
+const row = new ActionRowBuilder().addComponents(menu);
+
+message.channel.send({
+content:"📦 Escolha:",
+components:[row]
+});
+}
+
+/* ================= CHAVE PIX ================= */
+
+if (message.content === "!chave") {
+
+if (!message.channel.name.includes("ticket-"))
+return;
+
+const embed = new EmbedBuilder()
+.setTitle(pagamentoPix.titulo)
+.setDescription(`💰 Pix:\n\`\`\`\n${pagamentoPix.chave}\n\`\`\``)
+.setImage(pagamentoPix.qr)
+.setColor("Yellow");
+
+const msg = await message.channel.send({embeds:[embed]});
+embedsPagamentoTicket[message.channel.id] = msg.id;
+}
+
+/* ================= CONFIRMADO ================= */
+
+if (message.content === "!confirmado") {
+
+const dono = donosTicket[message.channel.id];
+
+if (
+message.author.id !== dono &&
+!message.member.roles.cache.has(CARGO_ADMIN_ID) &&
+!message.member.roles.cache.has(CARGO_STAFF_ID)
+)return;
+
+const msgId = embedsPagamentoTicket[message.channel.id];
+if(!msgId)return;
+
+const msg = await message.channel.messages.fetch(msgId);
+if(msg) await msg.delete();
+}
 
 });
 
 /* ================= INTERAÇÕES ================= */
 
-client.on("interactionCreate", async (interaction) => {
+client.on("interactionCreate", async (interaction)=>{
 
-  if (interaction.isStringSelectMenu()) {
+if(interaction.isStringSelectMenu()){
 
-    if (interaction.customId === "menu_pix_config") {
+if(interaction.customId === "selecionar_produto"){
 
-      const perguntar = async (pergunta) => {
-        await interaction.channel.send(pergunta);
-        const filtro = m => m.author.id === interaction.user.id;
-        const coletado = await interaction.channel.awaitMessages({ filter: filtro, max: 1 });
-        return coletado.first().content;
-      };
+for(const produtoNome of interaction.values){
 
-      if (interaction.values[0] === "titulo") {
-        const t = await perguntar("Digite o título:");
-        pagamentoPix.titulo = t;
-      }
+const produto = produtos[produtoNome];
 
-      if (interaction.values[0] === "qr") {
-        const q = await perguntar("Envie a URL da imagem do QR Code:");
-        pagamentoPix.qr = q;
-      }
+ticketCounter++;
 
-      if (interaction.values[0] === "chave") {
-        const c = await perguntar("Digite a chave Pix copia e cola:");
-        pagamentoPix.chave = c;
-      }
+const canalTicket = await interaction.guild.channels.create({
+name:`🛒・ticket-${ticketCounter}`,
+type:ChannelType.GuildText,
+permissionOverwrites:[
+{
+id:interaction.guild.id,
+deny:[PermissionsBitField.Flags.ViewChannel]
+},
+{
+id:interaction.user.id,
+allow:[
+PermissionsBitField.Flags.ViewChannel,
+PermissionsBitField.Flags.SendMessages,
+PermissionsBitField.Flags.AttachFiles
+]
+},
+{
+id:CARGO_ADMIN_ID,
+allow:[PermissionsBitField.Flags.ViewChannel]
+},
+{
+id:CARGO_STAFF_ID,
+allow:[PermissionsBitField.Flags.ViewChannel]
+}
+]
+});
 
-      interaction.reply({
-        content: "✅ Configurado com sucesso!",
-        ephemeral: true
-      });
-    }
+donosTicket[canalTicket.id] = interaction.user.id;
 
-    if (interaction.customId === "selecionar_produto") {
+const embed = new EmbedBuilder()
+.setTitle("🛒 Pedido Criado")
+.setDescription(`Produto: ${produto.nome}\nEstoque: ${produto.estoque}`)
+.setColor("Green");
 
-      const produto = produtos[interaction.values[0]];
+const rowTicket = new ActionRowBuilder().addComponents(
+new ButtonBuilder()
+.setLabel("🔗 Ir para o Ticket")
+.setStyle(ButtonStyle.Link)
+.setURL(`https://discord.com/channels/${interaction.guild.id}/${canalTicket.id}`),
 
-      const menuCanal = new ChannelSelectMenuBuilder()
-        .setCustomId(`selecionar_canal_${produto.nome}`)
-        .setPlaceholder("🔎 Escolha o canal")
-        .addChannelTypes(ChannelType.GuildText);
+new ButtonBuilder()
+.setCustomId("fechar_ticket")
+.setLabel("🔒 Fechar Ticket")
+.setStyle(ButtonStyle.Danger)
+);
 
-      const row = new ActionRowBuilder().addComponents(menuCanal);
+await canalTicket.send({
+content:`📢 ${interaction.user}`,
+embeds:[embed],
+components:[rowTicket]
+});
+}
 
-      return interaction.reply({
-        content: `📢 Escolha onde enviar **${produto.nome}**`,
-        components: [row],
-        ephemeral: true
-      });
-    }
+interaction.reply({content:"✅ Ticket criado!",ephemeral:true});
+}
+}
 
-    if (interaction.customId.startsWith("menu_compra_")) {
+if(interaction.isButton()){
 
-      const nomeProduto = interaction.customId.replace("menu_compra_", "");
-      const produto = produtos[nomeProduto];
-      const planoValue = interaction.values[0];
-      const plano = produto.planos.find(p => p.value === planoValue);
+if(interaction.customId === "fechar_ticket"){
 
-      ticketCounter++;
+const dono = donosTicket[interaction.channel.id];
 
-      const canalTicket = await interaction.guild.channels.create({
-        name: `🛒・ticket-${ticketCounter}`,
-        type: ChannelType.GuildText,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
-          { id: CARGO_ADMIN_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
-          { id: CARGO_STAFF_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] }
-        ]
-      });
+if(
+interaction.user.id !== dono &&
+!interaction.member.roles.cache.has(CARGO_ADMIN_ID) &&
+!interaction.member.roles.cache.has(CARGO_STAFF_ID)
+){
+return interaction.reply({content:"❌ Apenas dono ou staff",ephemeral:true});
+}
 
-      const embed = new EmbedBuilder()
-        .setTitle("🛒 Novo Pedido Criado!")
-        .setDescription(
-          `👤 Cliente: ${interaction.user}\n📦 Produto: ${produto.nome}\n💰 Plano: ${plano.label}\n\nAguarde atendimento.`
-        )
-        .setColor("Green");
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel("🔒 Fechar Ticket")
-          .setCustomId("fechar_ticket")
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      await canalTicket.send({
-        content: `📢 <@&${CARGO_ADMIN_ID}> <@&${CARGO_STAFF_ID}> Novo pedido!`,
-        embeds: [embed],
-        components: [row]
-      });
-
-      await interaction.reply({
-        content: "✅ Seu ticket foi criado!",
-        ephemeral: true
-      });
-    }
-  }
-
-  if (interaction.isChannelSelectMenu()) {
-
-    const nomeProduto = interaction.customId.replace("selecionar_canal_", "");
-    const produto = produtos[nomeProduto];
-    const canal = interaction.guild.channels.cache.get(interaction.values[0]);
-
-    const embed = new EmbedBuilder()
-      .setTitle(`🚀 ${produto.nome}`)
-      .setDescription(produto.descricao)
-      .setImage(produto.imagem)
-      .setColor("Blue");
-
-    const menuCompra = new StringSelectMenuBuilder()
-      .setCustomId(`menu_compra_${produto.nome}`)
-      .setPlaceholder("🛒 Escolha o plano")
-      .addOptions(
-        produto.planos.map(plano => ({
-          label: plano.label,
-          description: plano.description.slice(0, 100),
-          value: plano.value
-        }))
-      );
-
-    const row = new ActionRowBuilder().addComponents(menuCompra);
-
-    await canal.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    await interaction.update({
-      content: "✅ Produto enviado com sucesso!",
-      components: []
-    });
-  }
-
-  if (interaction.isButton()) {
-
-    if (interaction.customId === "fechar_ticket") {
-
-      if (
-        !interaction.member.roles.cache.has(CARGO_ADMIN_ID) &&
-        !interaction.member.roles.cache.has(CARGO_STAFF_ID)
-      ) {
-        return interaction.reply({
-          content: "❌ Apenas admin ou staff podem fechar.",
-          ephemeral: true
-        });
-      }
-
-      await interaction.reply({
-        content: "🔒 Fechando ticket...",
-        ephemeral: true
-      });
-
-      setTimeout(() => {
-        interaction.channel.delete();
-      }, 2000);
-    }
-  }
-
+await interaction.reply({content:"🔒 Fechando...",ephemeral:true});
+setTimeout(()=>{interaction.channel.delete()},2000);
+}
+}
 });
 
 client.login(TOKEN);
