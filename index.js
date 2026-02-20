@@ -1,300 +1,363 @@
-require("dotenv").config();
-const fs = require("fs");
-const path = require("path");
-
 const {
-Client,
-GatewayIntentBits,
-EmbedBuilder,
-ActionRowBuilder,
-ButtonBuilder,
-ButtonStyle,
-StringSelectMenuBuilder,
-ChannelSelectMenuBuilder,
-ChannelType,
-PermissionsBitField
-} = require("discord.js");
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder,
+  ChannelType,
+  PermissionsBitField
+} = require('discord.js');
 
 const client = new Client({
-intents:[
-GatewayIntentBits.Guilds,
-GatewayIntentBits.GuildMessages,
-GatewayIntentBits.MessageContent
-]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-const PRODUTOS_PATH = path.join(__dirname,"produtos.json");
-const PIX_PATH = path.join(__dirname,"pix.json");
-const COUNTER_PATH = path.join(__dirname,"counter.json");
+const TOKEN = "";
+const CARGO_ADMIN_ID = "1464846406450942065";
+const CARGO_STAFF_ID = "1464846409139359784";
 
-const CARGO_ADMIN_ID="1464846406450942065";
-const CARGO_STAFF_ID="1464846409139359784";
+let produtos = {};
+let ticketCounter = 0;
 
-let produtos={};
-let pixData={};
-let ticketCounter=0;
+let pagamentoPix = {
+  titulo: "",
+  qr: "",
+  chave: ""
+};
 
-/* ================= CARREGAR ================= */
-
-function carregarProdutos(){
-if(!fs.existsSync(PRODUTOS_PATH))
-fs.writeFileSync(PRODUTOS_PATH,JSON.stringify({},null,2));
-
-try{
-produtos=JSON.parse(fs.readFileSync(PRODUTOS_PATH,"utf8"));
-}catch{
-produtos={};
-}
-}
-
-function salvarProdutos(){
-fs.writeFileSync(PRODUTOS_PATH,JSON.stringify(produtos,null,2));
-}
-
-function carregarPix(){
-if(!fs.existsSync(PIX_PATH))
-fs.writeFileSync(PIX_PATH,JSON.stringify({},null,2));
-
-try{
-pixData=JSON.parse(fs.readFileSync(PIX_PATH,"utf8"));
-}catch{
-pixData={};
-}
-}
-
-function salvarPix(){
-fs.writeFileSync(PIX_PATH,JSON.stringify(pixData,null,2));
-}
-
-function carregarCounter(){
-if(!fs.existsSync(COUNTER_PATH))
-fs.writeFileSync(COUNTER_PATH,JSON.stringify({counter:0},null,2));
-
-ticketCounter=JSON.parse(fs.readFileSync(COUNTER_PATH)).counter;
-}
-
-function salvarCounter(){
-fs.writeFileSync(COUNTER_PATH,JSON.stringify({counter:ticketCounter},null,2));
-}
+let embedsPagamentoTicket = {};
 
 /* ================= READY ================= */
 
-client.once("clientReady",()=>{
-console.log(`✅ Online: ${client.user.tag}`);
+client.once("clientReady", () => {
+  console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
-/* CARREGA AO INICIAR */
-carregarProdutos();
-carregarPix();
-carregarCounter();
+/* ================= MENSAGENS ================= */
 
-/* ================= COMANDOS ================= */
+client.on("messageCreate", async (message) => {
 
-client.on("messageCreate",async(message)=>{
+  if (message.author.bot) return;
 
-if(message.author.bot) return;
+  /* ================= CRIAR PRODUTO ================= */
 
-/* COMANDOS */
+  if (message.content === "!criarproduto") {
 
-if(message.content==="!comandoszstore"){
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return message.reply("❌ Apenas administradores.");
 
-const embed=new EmbedBuilder()
-.setTitle("📜 Comandos ZStore")
-.setDescription(`
-!criarproduto - Criar produto
-!enviarproduto - Enviar produto no canal
-!pagamento - Mostrar PIX
-!cadastrarchave - Cadastrar PIX
-!comandoszstore - Ver comandos
-`)
-.setColor("Blue");
+    const perguntar = async (pergunta) => {
+      await message.channel.send(pergunta);
+      const filtro = m => m.author.id === message.author.id;
+      const coletado = await message.channel.awaitMessages({ filter: filtro, max: 1 });
+      return coletado.first().content;
+    };
 
-return message.channel.send({embeds:[embed]});
-}
+    const nome = await perguntar("📦 Nome do produto:");
+    const descricao = await perguntar("📝 Descrição:");
+    const imagem = await perguntar("🖼️ URL da imagem:");
+    const planosTexto = await perguntar("💰 Planos (um por linha):");
 
-/* PIX */
+    const planos = planosTexto.split("\n").map((linha, index) => {
+      return {
+        label: linha.split("|")[0].trim(),
+        description: linha.split("|").slice(1).join("|").trim(),
+        value: `plano_${Date.now()}_${index}`
+      };
+    });
 
-if(message.content==="!cadastrarchave"){
+    produtos[nome] = {
+      nome,
+      descricao,
+      imagem,
+      planos
+    };
 
-if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin.");
+    message.channel.send("✅ Produto criado com sucesso!");
+  }
 
-const filter=m=>m.author.id===message.author.id;
+  /* ================= ENVIAR PRODUTO ================= */
 
-await message.channel.send("Título:");
-const titulo=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+  if (message.content === "!enviarproduto") {
 
-await message.channel.send("Chave PIX:");
-const chave=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return;
 
-await message.channel.send("URL QR Code:");
-const qr=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+    if (Object.keys(produtos).length === 0)
+      return message.reply("❌ Nenhum produto criado.");
 
-pixData={titulo:titulo.content,chave:chave.content,qr:qr.content};
-salvarPix();
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId("selecionar_produto")
+      .setPlaceholder("📦 Escolha o produto")
+      .addOptions(
+        Object.values(produtos).map(prod => ({
+          label: prod.nome,
+          description: prod.descricao.slice(0, 100),
+          value: prod.nome
+        }))
+      );
 
-return message.channel.send("✅ PIX salvo!");
-}
+    const row = new ActionRowBuilder().addComponents(menu);
 
-/* PAGAMENTO */
+    message.channel.send({
+      content: "📦 Selecione o produto:",
+      components: [row]
+    });
+  }
 
-if(message.content==="!pagamento"){
+  /* ================= CADASTRAR PIX ================= */
 
-if(!pixData.titulo)
-return message.reply("❌ Nenhum PIX cadastrado.");
+  if (message.content === "!cadastrarchave") {
 
-const embed=new EmbedBuilder()
-.setTitle(pixData.titulo)
-.setDescription(`🔑 Chave PIX:\n${pixData.chave}`)
-.setImage(pixData.qr)
-.setColor("Green");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return message.reply("❌ Apenas administradores.");
 
-return message.channel.send({embeds:[embed]});
-}
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId("menu_pix_config")
+      .setPlaceholder("Configurar pagamento")
+      .addOptions([
+        { label: "Criar Título", value: "titulo" },
+        { label: "Colocar Foto QR Code", value: "qr" },
+        { label: "Chave Pix Copia e Cola", value: "chave" }
+      ]);
 
-/* CRIAR PRODUTO */
+    const row = new ActionRowBuilder().addComponents(menu);
 
-if(message.content==="!criarproduto"){
+    message.channel.send({
+      content: "⚙️ Configure o pagamento Pix:",
+      components: [row]
+    });
+  }
 
-if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin.");
+  /* ================= ENVIAR PIX ================= */
 
-const filter=m=>m.author.id===message.author.id;
+  if (message.content === "!chave") {
 
-await message.channel.send("Nome:");
-const nome=(await message.channel.awaitMessages({filter,max:1})).first().content;
+    if (!message.channel.name.includes("ticket-"))
+      return message.reply("❌ Use dentro do ticket.");
 
-await message.channel.send("Descrição:");
-const descricao=(await message.channel.awaitMessages({filter,max:1})).first().content;
+    const embed = new EmbedBuilder()
+      .setTitle(pagamentoPix.titulo || "Pagamento Pix")
+      .setDescription(`💰 **Chave Pix:**\n\`\`\`\n${pagamentoPix.chave}\n\`\`\``)
+      .setImage(pagamentoPix.qr)
+      .setColor("Yellow");
 
-await message.channel.send("URL Imagem:");
-const imagem=(await message.channel.awaitMessages({filter,max:1})).first().content;
+    const msg = await message.channel.send({
+      embeds: [embed]
+    });
 
-await message.channel.send("Planos (1 por linha):");
-const planosTexto=(await message.channel.awaitMessages({filter,max:1})).first().content;
+    embedsPagamentoTicket[message.channel.id] = msg.id;
+  }
 
-const planos=planosTexto.split("\n").map((l,i)=>({
-label:l.split("|")[0].trim(),
-description:l.split("|").slice(1).join("|").trim(),
-value:`plano_${Date.now()}_${i}`
-}));
+  /* ================= CONFIRMADO ================= */
 
-produtos[nome]={nome,descricao,imagem,planos};
-salvarProdutos();
+  if (message.content === "!confirmado") {
 
-return message.channel.send("✅ Produto salvo!");
-}
+    if (!message.channel.name.includes("ticket-"))
+      return;
 
-/* ENVIAR PRODUTO */
+    const msgId = embedsPagamentoTicket[message.channel.id];
+    if (!msgId) return;
 
-if(message.content==="!enviarproduto"){
+    const msg = await message.channel.messages.fetch(msgId);
+    if (msg) await msg.delete();
+  }
 
-if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return;
+  /* ================= COMANDOS ================= */
 
-if(Object.keys(produtos).length===0)
-return message.reply("❌ Nenhum produto.");
+  if (message.content === "!comando") {
 
-const menu=new StringSelectMenuBuilder()
-.setCustomId("selecionar_produto")
-.setPlaceholder("Escolha")
-.addOptions(
-Object.values(produtos).map(p=>({
-label:p.nome,
-description:p.descricao.slice(0,100),
-value:p.nome
-}))
-);
+    const embed = new EmbedBuilder()
+      .setTitle("📜 Comandos do Bot")
+      .setDescription(`
+🛠️ **Admin**
+!criarproduto
+!enviarproduto
+!cadastrarchave
 
-return message.channel.send({
-content:"📦 Selecione:",
-components:[new ActionRowBuilder().addComponents(menu)]
-});
-}
+💳 **Pagamento**
+!chave
+!confirmado
+
+📋 **Sistema**
+!comando
+      `)
+      .setColor("Blue");
+
+    message.channel.send({ embeds: [embed] });
+  }
 
 });
 
 /* ================= INTERAÇÕES ================= */
 
-client.on("interactionCreate",async(interaction)=>{
+client.on("interactionCreate", async (interaction) => {
 
-if(interaction.isStringSelectMenu()){
+  if (interaction.isStringSelectMenu()) {
 
-if(interaction.customId==="selecionar_produto"){
+    if (interaction.customId === "menu_pix_config") {
 
-const produto=produtos[interaction.values[0]];
+      const perguntar = async (pergunta) => {
+        await interaction.channel.send(pergunta);
+        const filtro = m => m.author.id === interaction.user.id;
+        const coletado = await interaction.channel.awaitMessages({ filter: filtro, max: 1 });
+        return coletado.first().content;
+      };
 
-const menuCanal=new ChannelSelectMenuBuilder()
-.setCustomId(`selecionar_canal_${produto.nome}`)
-.addChannelTypes(ChannelType.GuildText);
+      if (interaction.values[0] === "titulo") {
+        const t = await perguntar("Digite o título:");
+        pagamentoPix.titulo = t;
+      }
 
-return interaction.reply({
-content:`Enviar ${produto.nome} em qual canal?`,
-components:[new ActionRowBuilder().addComponents(menuCanal)],
-ephemeral:true
+      if (interaction.values[0] === "qr") {
+        const q = await perguntar("Envie a URL da imagem do QR Code:");
+        pagamentoPix.qr = q;
+      }
+
+      if (interaction.values[0] === "chave") {
+        const c = await perguntar("Digite a chave Pix copia e cola:");
+        pagamentoPix.chave = c;
+      }
+
+      interaction.reply({
+        content: "✅ Configurado com sucesso!",
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId === "selecionar_produto") {
+
+      const produto = produtos[interaction.values[0]];
+
+      const menuCanal = new ChannelSelectMenuBuilder()
+        .setCustomId(`selecionar_canal_${produto.nome}`)
+        .setPlaceholder("🔎 Escolha o canal")
+        .addChannelTypes(ChannelType.GuildText);
+
+      const row = new ActionRowBuilder().addComponents(menuCanal);
+
+      return interaction.reply({
+        content: `📢 Escolha onde enviar **${produto.nome}**`,
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId.startsWith("menu_compra_")) {
+
+      const nomeProduto = interaction.customId.replace("menu_compra_", "");
+      const produto = produtos[nomeProduto];
+      const planoValue = interaction.values[0];
+      const plano = produto.planos.find(p => p.value === planoValue);
+
+      ticketCounter++;
+
+      const canalTicket = await interaction.guild.channels.create({
+        name: `🛒・ticket-${ticketCounter}`,
+        type: ChannelType.GuildText,
+        permissionOverwrites: [
+          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
+          { id: CARGO_ADMIN_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] },
+          { id: CARGO_STAFF_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] }
+        ]
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle("🛒 Novo Pedido Criado!")
+        .setDescription(
+          `👤 Cliente: ${interaction.user}\n📦 Produto: ${produto.nome}\n💰 Plano: ${plano.label}\n\nAguarde atendimento.`
+        )
+        .setColor("Green");
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel("🔒 Fechar Ticket")
+          .setCustomId("fechar_ticket")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await canalTicket.send({
+        content: `📢 <@&${CARGO_ADMIN_ID}> <@&${CARGO_STAFF_ID}> Novo pedido!`,
+        embeds: [embed],
+        components: [row]
+      });
+
+      await interaction.reply({
+        content: "✅ Seu ticket foi criado!",
+        ephemeral: true
+      });
+    }
+  }
+
+  if (interaction.isChannelSelectMenu()) {
+
+    const nomeProduto = interaction.customId.replace("selecionar_canal_", "");
+    const produto = produtos[nomeProduto];
+    const canal = interaction.guild.channels.cache.get(interaction.values[0]);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🚀 ${produto.nome}`)
+      .setDescription(produto.descricao)
+      .setImage(produto.imagem)
+      .setColor("Blue");
+
+    const menuCompra = new StringSelectMenuBuilder()
+      .setCustomId(`menu_compra_${produto.nome}`)
+      .setPlaceholder("🛒 Escolha o plano")
+      .addOptions(
+        produto.planos.map(plano => ({
+          label: plano.label,
+          description: plano.description.slice(0, 100),
+          value: plano.value
+        }))
+      );
+
+    const row = new ActionRowBuilder().addComponents(menuCompra);
+
+    await canal.send({
+      embeds: [embed],
+      components: [row]
+    });
+
+    await interaction.update({
+      content: "✅ Produto enviado com sucesso!",
+      components: []
+    });
+  }
+
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "fechar_ticket") {
+
+      if (
+        !interaction.member.roles.cache.has(CARGO_ADMIN_ID) &&
+        !interaction.member.roles.cache.has(CARGO_STAFF_ID)
+      ) {
+        return interaction.reply({
+          content: "❌ Apenas admin ou staff podem fechar.",
+          ephemeral: true
+        });
+      }
+
+      await interaction.reply({
+        content: "🔒 Fechando ticket...",
+        ephemeral: true
+      });
+
+      setTimeout(() => {
+        interaction.channel.delete();
+      }, 2000);
+    }
+  }
+
 });
-}
 
-if(interaction.customId.startsWith("menu_compra_")){
-
-const nomeProduto=interaction.customId.replace("menu_compra_","");
-const produto=produtos[nomeProduto];
-const plano=produto.planos.find(p=>p.value===interaction.values[0]);
-
-ticketCounter++;
-salvarCounter();
-
-const canalTicket=await interaction.guild.channels.create({
-name:`ticket-${ticketCounter}`,
-type:ChannelType.GuildText,
-permissionOverwrites:[
-{id:interaction.guild.id,deny:[PermissionsBitField.Flags.ViewChannel]},
-{id:interaction.user.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
-{id:CARGO_ADMIN_ID,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
-{id:CARGO_STAFF_ID,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]}
-]
-});
-
-const embed=new EmbedBuilder()
-.setTitle("🛒 Pedido")
-.setDescription(`👤 ${interaction.user}\n📦 ${produto.nome}\n💰 ${plano.label}`)
-.setColor("Green");
-
-await canalTicket.send({embeds:[embed]});
-
-return interaction.reply({content:"✅ Ticket criado!",ephemeral:true});
-}
-
-}
-
-if(interaction.isChannelSelectMenu()){
-
-const nomeProduto=interaction.customId.replace("selecionar_canal_","");
-const produto=produtos[nomeProduto];
-const canal=interaction.guild.channels.cache.get(interaction.values[0]);
-
-const embed=new EmbedBuilder()
-.setTitle(produto.nome)
-.setDescription(produto.descricao)
-.setImage(produto.imagem)
-.setColor("Blue");
-
-const menuCompra=new StringSelectMenuBuilder()
-.setCustomId(`menu_compra_${produto.nome}`)
-.addOptions(produto.planos.map(p=>({
-label:p.label,
-description:p.description.slice(0,100),
-value:p.value
-})));
-
-await canal.send({
-embeds:[embed],
-components:[new ActionRowBuilder().addComponents(menuCompra)]
-});
-
-return interaction.update({content:"✅ Enviado!",components:[]});
-}
-
-});
-
-client.login(process.env.TOKEN);
+client.login(TOKEN);
