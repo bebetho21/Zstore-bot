@@ -1,77 +1,54 @@
+require("dotenv").config();
+const fs = require("fs");
+
 const {
-  Client,
-  GatewayIntentBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  ChannelType,
-  PermissionsBitField
-} = require('discord.js');
+Client,
+GatewayIntentBits,
+EmbedBuilder,
+ActionRowBuilder,
+ButtonBuilder,
+ButtonStyle,
+StringSelectMenuBuilder,
+ChannelType,
+PermissionsBitField
+} = require("discord.js");
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent
-  ]
-});
-
-const TOKEN = process.env.TOKEN;
-const CARGO_ADMIN_ID = "1464846406450942065";
-const CARGO_STAFF_ID = "1464846409139359784";
+intents: [
+GatewayIntentBits.Guilds,
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.MessageContent
+]});
 
 let produtos = {};
-let ticketCounter = 0;
-let donosTicket = {};
-let embedsPagamentoTicket = {};
+let pagamentoPix = {};
 
-let pagamentoPix = {
-  titulo: "",
-  qr: "",
-  chave: ""
-};
+if (fs.existsSync("./produtos.json")) {
+produtos = JSON.parse(fs.readFileSync("./produtos.json"));
+}
 
-client.once("clientReady", () => {
-  console.log(`✅ Online como ${client.user.tag}`);
-});
+if (fs.existsSync("./pix.json")) {
+pagamentoPix = JSON.parse(fs.readFileSync("./pix.json"));
+}
 
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", async (message)=>{
 
 if(message.author.bot) return;
 
-/* ================= COMANDOS ================= */
-
 if(message.content === "!comandosbot"){
-
-const embed = new EmbedBuilder()
-.setTitle("📜 Comandos")
-.setDescription(`
-🛠️ Admin:
-!criarproduto
-!enviarproduto
-!cadastrarpix
-
-💳 Pagamento:
-!chave
-!confirmado
-
-📋 Sistema:
-!comandosbot
-`)
-.setColor("Blue");
-
-message.channel.send({embeds:[embed]});
+message.reply(`
+📦 !criarproduto
+📦 !enviarproduto
+💳 !cadastrarpix
+💳 !chave
+✅ !confirmado
+`);
 }
-
-/* ================= CADASTRAR PIX ================= */
 
 if(message.content === "!cadastrarpix"){
 
 if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin");
+return message.reply("❌ Apenas administradores.");
 
 const perguntar = async (pergunta) => {
 await message.channel.send(pergunta);
@@ -80,54 +57,34 @@ const coletado = await message.channel.awaitMessages({filter:filtro,max:1});
 return coletado.first().content;
 };
 
-pagamentoPix.titulo = await perguntar("Título:");
-pagamentoPix.qr = await perguntar("URL do QR Code:");
-pagamentoPix.chave = await perguntar("Pix Copia e Cola:");
+const titulo = await perguntar("Digite o título do pagamento:");
+const qr = await perguntar("Envie a URL da imagem do QR Code:");
+const chave = await perguntar("Cole a chave Pix copia e cola:");
+
+pagamentoPix.titulo = titulo;
+pagamentoPix.qr = qr;
+pagamentoPix.chave = chave;
+
+fs.writeFileSync("./pix.json",JSON.stringify(pagamentoPix,null,2))
 
 message.channel.send("✅ Pix cadastrado!");
 }
 
-/* ================= CHAVE PIX ================= */
-
 if(message.content === "!chave"){
-
-if (!message.channel.name.includes("ticket-")) return;
 
 const embed = new EmbedBuilder()
 .setTitle(pagamentoPix.titulo)
-.setDescription(`💰 Pix:\n\`\`\`\n${pagamentoPix.chave}\n\`\`\``)
+.setDescription(`💳 Chave Pix:\n\`\`\`${pagamentoPix.chave}\`\`\``)
 .setImage(pagamentoPix.qr)
-.setColor("Yellow");
 
-const msg = await message.channel.send({embeds:[embed]});
-embedsPagamentoTicket[message.channel.id] = msg.id;
+message.channel.send({embeds:[embed]});
 }
-
-/* ================= CONFIRMADO ================= */
 
 if(message.content === "!confirmado"){
-
-const dono = donosTicket[message.channel.id];
-
-if(
-message.author.id !== dono &&
-!message.member.roles.cache.has(CARGO_ADMIN_ID) &&
-!message.member.roles.cache.has(CARGO_STAFF_ID)
-)return;
-
-const msgId = embedsPagamentoTicket[message.channel.id];
-if(!msgId)return;
-
-const msg = await message.channel.messages.fetch(msgId);
-if(msg) await msg.delete();
+message.channel.bulkDelete(5)
 }
 
-/* ================= CRIAR PRODUTO ================= */
-
 if(message.content === "!criarproduto"){
-
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin");
 
 const perguntar = async (pergunta) => {
 await message.channel.send(pergunta);
@@ -136,68 +93,50 @@ const coletado = await message.channel.awaitMessages({filter:filtro,max:1});
 return coletado.first().content;
 };
 
-const nome = await perguntar("Nome:");
+const nome = await perguntar("Nome do produto:");
 const descricao = await perguntar("Descrição:");
-const imagem = await perguntar("URL da imagem:");
+const preco = await perguntar("Preço:");
 const estoque = await perguntar("Quantidade em estoque:");
-const planosTexto = await perguntar("Planos (1 por linha):");
+const canal = await perguntar("ID do canal:");
 
-const planos = planosTexto.split("\n").map((linha,index)=>{
-return {
-label: linha.split("|")[0].trim(),
-description:(linha.split("|").slice(1).join("|").trim() || "Plano disponível").padEnd(5,"."),
-value:`plano_${Date.now()}_${index}`
-};
-});
+const id = Date.now().toString()
 
-produtos[nome] = {nome,descricao,imagem,estoque,planos};
+produtos[id] = {nome,descricao,preco,estoque}
+
+fs.writeFileSync("./produtos.json",JSON.stringify(produtos,null,2))
+
+const menu = new StringSelectMenuBuilder()
+.setCustomId("comprar_"+id)
+.setPlaceholder("Selecione")
+.setMinValues(1)
+.setMaxValues(5)
+.addOptions([{
+label: nome.length < 5 ? nome+"...." : nome,
+description: descricao.length < 5 ? descricao+"...." : descricao,
+value: ("produto_"+id)
+}])
+
+const row = new ActionRowBuilder().addComponents(menu)
+
+const embed = new EmbedBuilder()
+.setTitle(nome)
+.setDescription(descricao)
+.addFields({name:"Preço",value:preco})
+
+client.channels.cache.get(canal).send({embeds:[embed],components:[row]})
 
 message.channel.send("✅ Produto criado!");
 }
+})
 
-/* ================= ENVIAR PRODUTO ================= */
-
-if(message.content === "!enviarproduto"){
-
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return;
-
-const menu = new StringSelectMenuBuilder()
-.setCustomId("selecionar_produto")
-.setPlaceholder("Escolha")
-.setMinValues(1)
-.setMaxValues(5)
-.addOptions(
-Object.values(produtos).map(prod=>({
-label: prod.nome,
-description:`Estoque: ${prod.estoque}`,
-value: prod.nome
-}))
-);
-
-const row = new ActionRowBuilder().addComponents(menu);
-
-message.channel.send({content:"📦 Produtos:",components:[row]});
-}
-
-});
-
-/* ================= INTERAÇÕES ================= */
-
-client.on("interactionCreate", async (interaction)=>{
+client.on("interactionCreate", async interaction => {
 
 if(interaction.isStringSelectMenu()){
 
-if(interaction.customId === "selecionar_produto"){
+const id = interaction.values[0].replace("produto_","")
 
-for(const produtoNome of interaction.values){
-
-const produto = produtos[produtoNome];
-
-ticketCounter++;
-
-const canalTicket = await interaction.guild.channels.create({
-name:`ticket-${ticketCounter}`,
+const canal = await interaction.guild.channels.create({
+name:`ticket-${interaction.user.username}`,
 type:ChannelType.GuildText,
 permissionOverwrites:[
 {
@@ -206,71 +145,42 @@ deny:[PermissionsBitField.Flags.ViewChannel]
 },
 {
 id:interaction.user.id,
-allow:[
-PermissionsBitField.Flags.ViewChannel,
-PermissionsBitField.Flags.SendMessages,
-PermissionsBitField.Flags.AttachFiles
-]
-},
-{
-id:CARGO_ADMIN_ID,
-allow:[PermissionsBitField.Flags.ViewChannel]
-},
-{
-id:CARGO_STAFF_ID,
 allow:[PermissionsBitField.Flags.ViewChannel]
 }
 ]
-});
+})
 
-donosTicket[canalTicket.id] = interaction.user.id;
-
-const embed = new EmbedBuilder()
-.setTitle("🛒 Pedido Criado")
-.setDescription(`Produto: ${produto.nome}`)
-.setColor("Green");
-
-const rowTicket = new ActionRowBuilder().addComponents(
-new ButtonBuilder()
-.setLabel("🔗 Ir para Ticket")
+const btn = new ButtonBuilder()
+.setLabel("Ir para Ticket")
 .setStyle(ButtonStyle.Link)
-.setURL(`https://discord.com/channels/${interaction.guild.id}/${canalTicket.id}`),
+.setURL(`https://discord.com/channels/${interaction.guild.id}/${canal.id}`)
 
-new ButtonBuilder()
-.setCustomId("fechar_ticket")
-.setLabel("🔒 Fechar Ticket")
+const fechar = new ButtonBuilder()
+.setCustomId("fechar")
+.setLabel("Fechar Ticket")
 .setStyle(ButtonStyle.Danger)
-);
 
-await canalTicket.send({
-content:`📢 ${interaction.user}`,
-embeds:[embed],
-components:[rowTicket]
-});
-}
+const row = new ActionRowBuilder().addComponents(btn)
+const row2 = new ActionRowBuilder().addComponents(fechar)
 
-interaction.reply({content:"✅ Ticket criado!",ephemeral:true});
-}
+canal.send({content:`${interaction.user}`,components:[row,row2]})
+interaction.reply({content:"Ticket criado!",ephemeral:true})
+
 }
 
 if(interaction.isButton()){
 
-if(interaction.customId === "fechar_ticket"){
+if(interaction.customId === "fechar"){
 
-const dono = donosTicket[interaction.channel.id];
+if(!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return interaction.reply({content:"❌ Apenas staff!",ephemeral:true})
 
-if(
-interaction.user.id !== dono &&
-!interaction.member.roles.cache.has(CARGO_ADMIN_ID) &&
-!interaction.member.roles.cache.has(CARGO_STAFF_ID)
-){
-return interaction.reply({content:"❌ Apenas dono ou staff",ephemeral:true});
+interaction.channel.delete()
+
 }
 
-await interaction.reply({content:"🔒 Fechando...",ephemeral:true});
-setTimeout(()=>{interaction.channel.delete()},2000);
 }
-}
-});
 
-client.login(TOKEN);
+})
+
+client.login(process.env.TOKEN)
