@@ -16,7 +16,7 @@ PermissionsBitField
 } = require("discord.js");
 
 const client = new Client({
-intents: [
+intents:[
 GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMessages,
 GatewayIntentBits.MessageContent
@@ -25,25 +25,25 @@ GatewayIntentBits.MessageContent
 
 const PRODUTOS_PATH = path.join(__dirname,"produtos.json");
 const PIX_PATH = path.join(__dirname,"pix.json");
+const COUNTER_PATH = path.join(__dirname,"counter.json");
 
-const CARGO_ADMIN_ID = "1464846406450942065";
-const CARGO_STAFF_ID = "1464846409139359784";
+const CARGO_ADMIN_ID="1464846406450942065";
+const CARGO_STAFF_ID="1464846409139359784";
 
-let produtos = {};
-let pixData = {};
-let ticketCounter = 0;
+let produtos={};
+let pixData={};
+let ticketCounter=0;
+
+/* ================= CARREGAR ================= */
 
 function carregarProdutos(){
-try{
-if(!fs.existsSync(PRODUTOS_PATH)){
+if(!fs.existsSync(PRODUTOS_PATH))
 fs.writeFileSync(PRODUTOS_PATH,JSON.stringify({},null,2));
-}
-const data = fs.readFileSync(PRODUTOS_PATH,"utf8");
-produtos = data ? JSON.parse(data) : {};
-console.log("📦 Produtos carregados!");
-}catch(e){
-console.log(e);
-produtos = {};
+
+try{
+produtos=JSON.parse(fs.readFileSync(PRODUTOS_PATH,"utf8"));
+}catch{
+produtos={};
 }
 }
 
@@ -52,13 +52,13 @@ fs.writeFileSync(PRODUTOS_PATH,JSON.stringify(produtos,null,2));
 }
 
 function carregarPix(){
-try{
-if(!fs.existsSync(PIX_PATH)){
+if(!fs.existsSync(PIX_PATH))
 fs.writeFileSync(PIX_PATH,JSON.stringify({},null,2));
-}
-pixData = JSON.parse(fs.readFileSync(PIX_PATH,"utf8"));
+
+try{
+pixData=JSON.parse(fs.readFileSync(PIX_PATH,"utf8"));
 }catch{
-pixData = {};
+pixData={};
 }
 }
 
@@ -66,60 +66,82 @@ function salvarPix(){
 fs.writeFileSync(PIX_PATH,JSON.stringify(pixData,null,2));
 }
 
+function carregarCounter(){
+if(!fs.existsSync(COUNTER_PATH))
+fs.writeFileSync(COUNTER_PATH,JSON.stringify({counter:0},null,2));
+
+ticketCounter=JSON.parse(fs.readFileSync(COUNTER_PATH)).counter;
+}
+
+function salvarCounter(){
+fs.writeFileSync(COUNTER_PATH,JSON.stringify({counter:ticketCounter},null,2));
+}
+
+/* ================= READY ================= */
+
 client.once("clientReady",()=>{
 console.log(`✅ Online: ${client.user.tag}`);
+});
 
+/* CARREGA AO INICIAR */
 carregarProdutos();
 carregarPix();
-
-fs.watchFile(PRODUTOS_PATH,()=>{
-console.log("📦 produtos.json atualizado!");
-carregarProdutos();
-});
-});
+carregarCounter();
 
 /* ================= COMANDOS ================= */
 
-client.on("messageCreate", async(message)=>{
+client.on("messageCreate",async(message)=>{
 
 if(message.author.bot) return;
 
-/* PIX */
+/* COMANDOS */
 
-if(message.content === "!cadastrarchave"){
+if(message.content==="!comandoszstore"){
 
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin.");
+const embed=new EmbedBuilder()
+.setTitle("📜 Comandos ZStore")
+.setDescription(`
+!criarproduto - Criar produto
+!enviarproduto - Enviar produto no canal
+!pagamento - Mostrar PIX
+!cadastrarchave - Cadastrar PIX
+!comandoszstore - Ver comandos
+`)
+.setColor("Blue");
 
-const filter = m => m.author.id === message.author.id;
-
-await message.channel.send("Título:");
-const titulo = await message.channel.awaitMessages({filter,max:1,time:60000});
-if(!titulo.first()) return;
-
-await message.channel.send("Chave PIX:");
-const chave = await message.channel.awaitMessages({filter,max:1,time:60000});
-if(!chave.first()) return;
-
-await message.channel.send("URL QR Code:");
-const qr = await message.channel.awaitMessages({filter,max:1,time:60000});
-if(!qr.first()) return;
-
-pixData={
-titulo:titulo.first().content,
-chave:chave.first().content,
-qr:qr.first().content
+return message.channel.send({embeds:[embed]});
 }
 
+/* PIX */
+
+if(message.content==="!cadastrarchave"){
+
+if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+return message.reply("❌ Apenas admin.");
+
+const filter=m=>m.author.id===message.author.id;
+
+await message.channel.send("Título:");
+const titulo=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+
+await message.channel.send("Chave PIX:");
+const chave=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+
+await message.channel.send("URL QR Code:");
+const qr=(await message.channel.awaitMessages({filter,max:1,time:60000})).first();
+
+pixData={titulo:titulo.content,chave:chave.content,qr:qr.content};
 salvarPix();
-message.channel.send("✅ PIX salvo!");
+
+return message.channel.send("✅ PIX salvo!");
 }
 
 /* PAGAMENTO */
 
-if(message.content === "!pagamento"){
+if(message.content==="!pagamento"){
 
-if(!pixData.titulo) return message.reply("❌ Nenhum PIX cadastrado.");
+if(!pixData.titulo)
+return message.reply("❌ Nenhum PIX cadastrado.");
 
 const embed=new EmbedBuilder()
 .setTitle(pixData.titulo)
@@ -127,16 +149,14 @@ const embed=new EmbedBuilder()
 .setImage(pixData.qr)
 .setColor("Green");
 
-const msg=await message.channel.send({embeds:[embed]});
-pixData.msgId=msg.id;
-salvarPix();
+return message.channel.send({embeds:[embed]});
 }
 
 /* CRIAR PRODUTO */
 
-if(message.content === "!criarproduto"){
+if(message.content==="!criarproduto"){
 
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
 return message.reply("❌ Apenas admin.");
 
 const filter=m=>m.author.id===message.author.id;
@@ -153,23 +173,23 @@ const imagem=(await message.channel.awaitMessages({filter,max:1})).first().conte
 await message.channel.send("Planos (1 por linha):");
 const planosTexto=(await message.channel.awaitMessages({filter,max:1})).first().content;
 
-const planos=planosTexto.split("\n").map((linha,index)=>({
-label:linha.split("|")[0].trim(),
-description:linha.split("|").slice(1).join("|").trim(),
-value:`plano_${Date.now()}_${index}`
+const planos=planosTexto.split("\n").map((l,i)=>({
+label:l.split("|")[0].trim(),
+description:l.split("|").slice(1).join("|").trim(),
+value:`plano_${Date.now()}_${i}`
 }));
 
 produtos[nome]={nome,descricao,imagem,planos};
 salvarProdutos();
 
-message.channel.send("✅ Produto salvo!");
+return message.channel.send("✅ Produto salvo!");
 }
 
 /* ENVIAR PRODUTO */
 
-if(message.content === "!enviarproduto"){
+if(message.content==="!enviarproduto"){
 
-if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
 return;
 
 if(Object.keys(produtos).length===0)
@@ -179,14 +199,14 @@ const menu=new StringSelectMenuBuilder()
 .setCustomId("selecionar_produto")
 .setPlaceholder("Escolha")
 .addOptions(
-Object.values(produtos).map(prod=>({
-label:prod.nome,
-description:prod.descricao.slice(0,100),
-value:prod.nome
+Object.values(produtos).map(p=>({
+label:p.nome,
+description:p.descricao.slice(0,100),
+value:p.nome
 }))
 );
 
-message.channel.send({
+return message.channel.send({
 content:"📦 Selecione:",
 components:[new ActionRowBuilder().addComponents(menu)]
 });
@@ -196,7 +216,7 @@ components:[new ActionRowBuilder().addComponents(menu)]
 
 /* ================= INTERAÇÕES ================= */
 
-client.on("interactionCreate", async(interaction)=>{
+client.on("interactionCreate",async(interaction)=>{
 
 if(interaction.isStringSelectMenu()){
 
@@ -206,11 +226,10 @@ const produto=produtos[interaction.values[0]];
 
 const menuCanal=new ChannelSelectMenuBuilder()
 .setCustomId(`selecionar_canal_${produto.nome}`)
-.setPlaceholder("Escolha o canal")
 .addChannelTypes(ChannelType.GuildText);
 
 return interaction.reply({
-content:`Enviar **${produto.nome}** em qual canal?`,
+content:`Enviar ${produto.nome} em qual canal?`,
 components:[new ActionRowBuilder().addComponents(menuCanal)],
 ephemeral:true
 });
@@ -223,38 +242,27 @@ const produto=produtos[nomeProduto];
 const plano=produto.planos.find(p=>p.value===interaction.values[0]);
 
 ticketCounter++;
+salvarCounter();
 
 const canalTicket=await interaction.guild.channels.create({
 name:`ticket-${ticketCounter}`,
 type:ChannelType.GuildText,
 permissionOverwrites:[
 {id:interaction.guild.id,deny:[PermissionsBitField.Flags.ViewChannel]},
-{id:interaction.user.id,allow:[
-PermissionsBitField.Flags.ViewChannel,
-PermissionsBitField.Flags.SendMessages,
-PermissionsBitField.Flags.AttachFiles
-]},
-{id:CARGO_ADMIN_ID,allow:[
-PermissionsBitField.Flags.ViewChannel,
-PermissionsBitField.Flags.SendMessages,
-PermissionsBitField.Flags.AttachFiles
-]},
-{id:CARGO_STAFF_ID,allow:[
-PermissionsBitField.Flags.ViewChannel,
-PermissionsBitField.Flags.SendMessages,
-PermissionsBitField.Flags.AttachFiles
-]}
+{id:interaction.user.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
+{id:CARGO_ADMIN_ID,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
+{id:CARGO_STAFF_ID,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]}
 ]
 });
 
 const embed=new EmbedBuilder()
 .setTitle("🛒 Pedido")
-.setDescription(`👤 ${interaction.user}\n📦 ${produto.nome}\n💰 ${plano.label}\n\nEnvie fotos ou arquivos aqui se necessário.`)
+.setDescription(`👤 ${interaction.user}\n📦 ${produto.nome}\n💰 ${plano.label}`)
 .setColor("Green");
 
 await canalTicket.send({embeds:[embed]});
 
-interaction.reply({content:"✅ Ticket criado!",ephemeral:true});
+return interaction.reply({content:"✅ Ticket criado!",ephemeral:true});
 }
 
 }
@@ -273,7 +281,6 @@ const embed=new EmbedBuilder()
 
 const menuCompra=new StringSelectMenuBuilder()
 .setCustomId(`menu_compra_${produto.nome}`)
-.setPlaceholder("Escolha o plano")
 .addOptions(produto.planos.map(p=>({
 label:p.label,
 description:p.description.slice(0,100),
@@ -285,7 +292,7 @@ embeds:[embed],
 components:[new ActionRowBuilder().addComponents(menuCompra)]
 });
 
-interaction.update({content:"✅ Enviado!",components:[]});
+return interaction.update({content:"✅ Enviado!",components:[]});
 }
 
 });
