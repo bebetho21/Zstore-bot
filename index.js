@@ -53,6 +53,21 @@ client.on("messageCreate", async (message) => {
 
   const command = message.content.slice(prefix.length).toLowerCase();
 
+  // ================= COMANDOS =================
+
+  if (command === "comandos") {
+
+    const embed = new EmbedBuilder()
+      .setTitle("📦 Comandos do Bot")
+      .setColor("Blue")
+      .setDescription(`
+\`!criarproduto\` - Criar novo produto
+\`!comandos\` - Mostrar todos os comandos
+      `);
+
+    return message.reply({ embeds: [embed] });
+  }
+
   // ================= CRIAR PRODUTO =================
 
   if (command === "criarproduto") {
@@ -92,8 +107,6 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
 
   const produtos = loadProdutos();
-
-  // ================= BOTÕES =================
 
   if (interaction.isButton()) {
 
@@ -187,8 +200,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // ================= MODAL =================
-
   if (interaction.isModalSubmit()) {
 
     const id = interaction.customId.split("_")[2];
@@ -204,8 +215,6 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "Opção adicionada!", ephemeral: true });
   }
 
-  // ================= COMPRA =================
-
   if (interaction.isStringSelectMenu()) {
 
     const id = interaction.customId.split("_")[1];
@@ -220,13 +229,11 @@ client.on("interactionCreate", async (interaction) => {
     const cargo = interaction.guild.roles.cache.find(r => r.name === CLIENT_ROLE_NAME);
     if (cargo) await interaction.member.roles.add(cargo);
 
-    // CRIAR CATEGORIA
     const categoria = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildCategory
     });
 
-    // CRIAR CANAL DENTRO
     const canal = await interaction.guild.channels.create({
       name: "compra",
       type: ChannelType.GuildText,
