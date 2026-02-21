@@ -27,10 +27,8 @@ const client = new Client({
 
 const prefix = "!";
 const produtosFile = "./produtos.json";
-
 const OWNER_ROLE = "Dono";
 const CLIENT_ROLE = "Cliente";
-const MUTE_ROLE = "Muted";
 
 if (!fs.existsSync(produtosFile))
   fs.writeFileSync(produtosFile, JSON.stringify({}));
@@ -43,193 +41,79 @@ client.once("ready", () => {
   console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
+/* =========================
+   COMANDOS DE TEXTO
+========================= */
+
 client.on("messageCreate", async (message) => {
   if (!message.content.startsWith(prefix) || message.author.bot) return;
 
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+  const command = message.content.slice(prefix.length).toLowerCase();
 
-  // ================= COMANDOS =================
+  /* ===== COMANDOS ===== */
 
   if (command === "comandos") {
     const embed = new EmbedBuilder()
       .setTitle("📦 Central de Comandos")
       .setColor("Blue")
       .setDescription(`
-📦 **Loja**
-!criarproduto
-!painelprodutos
-!deletarproduto
-!estoque
-
-🎟 **Sistema**
-!cliente
-
-📢 **Admin**
+🛠 Administração
+!paineladmin
 !anunciar
 !clear
 !ban
 !kick
-!mute
-!unmute
-!enviarembed
+
+🛒 Loja
+!painelprodutos
       `);
 
     return message.reply({ embeds: [embed] });
   }
 
-  // ================= CLIENTE =================
+  /* ===== PAINEL ADMIN ===== */
 
-  if (command === "cliente") {
+  if (command === "paineladmin") {
+
     if (!message.member.roles.cache.some(r => r.name === OWNER_ROLE))
       return message.reply("❌ Apenas Dono.");
-
-    const cargo = message.guild.roles.cache.find(r => r.name === CLIENT_ROLE);
-    if (!cargo) return message.reply("Cargo Cliente não existe.");
-
-    await message.member.roles.add(cargo);
-    return message.reply("✅ Cargo Cliente adicionado.");
-  }
-
-  // ================= ANUNCIAR =================
-
-  if (command === "anunciar") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply("❌ Apenas admin.");
-
-    const texto = args.join(" ");
-    if (!texto) return message.reply("Escreva o anúncio.");
 
     const embed = new EmbedBuilder()
-      .setTitle("📢 Anúncio")
-      .setDescription(texto)
-      .setColor("Green");
+      .setTitle("🛠 Painel Administrativo")
+      .setDescription("Gerencie sua loja pelos botões abaixo.")
+      .setColor("Purple");
 
-    return message.channel.send({ embeds: [embed] });
-  }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("admin_criar")
+        .setLabel("Criar Produto")
+        .setStyle(ButtonStyle.Success),
 
-  // ================= CLEAR =================
-
-  if (command === "clear") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages))
-      return message.reply("Sem permissão.");
-
-    const quantidade = parseInt(args[0]);
-    if (!quantidade) return message.reply("Digite quantidade.");
-
-    await message.channel.bulkDelete(quantidade, true);
-  }
-
-  // ================= BAN =================
-
-  if (command === "ban") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
-      return message.reply("Sem permissão.");
-
-    const membro = message.mentions.members.first();
-    if (!membro) return message.reply("Mencione alguém.");
-
-    await membro.ban();
-    message.channel.send("🔨 Usuário banido.");
-  }
-
-  // ================= KICK =================
-
-  if (command === "kick") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers))
-      return message.reply("Sem permissão.");
-
-    const membro = message.mentions.members.first();
-    if (!membro) return message.reply("Mencione alguém.");
-
-    await membro.kick();
-    message.channel.send("👢 Usuário expulso.");
-  }
-
-  // ================= MUTE =================
-
-  if (command === "mute") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
-      return message.reply("Sem permissão.");
-
-    const membro = message.mentions.members.first();
-    if (!membro) return message.reply("Mencione alguém.");
-
-    await membro.timeout(10 * 60 * 1000);
-    message.channel.send("🔇 Usuário mutado por 10 minutos.");
-  }
-
-  if (command === "unmute") {
-    const membro = message.mentions.members.first();
-    if (!membro) return message.reply("Mencione alguém.");
-
-    await membro.timeout(null);
-    message.channel.send("🔊 Usuário desmutado.");
-  }
-
-  // ================= ENVIAR EMBED =================
-
-  if (command === "enviarembed") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return;
-
-    const modal = new ModalBuilder()
-      .setCustomId("embedModal")
-      .setTitle("Criar Embed");
-
-    const titulo = new TextInputBuilder()
-      .setCustomId("titulo")
-      .setLabel("Título")
-      .setStyle(TextInputStyle.Short);
-
-    const descricao = new TextInputBuilder()
-      .setCustomId("descricao")
-      .setLabel("Descrição")
-      .setStyle(TextInputStyle.Paragraph);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(titulo),
-      new ActionRowBuilder().addComponents(descricao)
+      new ButtonBuilder()
+        .setCustomId("admin_produtos")
+        .setLabel("Gerenciar Produtos")
+        .setStyle(ButtonStyle.Primary)
     );
 
-    return message.showModal(modal);
+    return message.channel.send({ embeds: [embed], components: [row] });
   }
 
-  // ================= CRIAR PRODUTO =================
-
-  if (command === "criarproduto") {
-
-    if (!message.member.roles.cache.some(r => r.name === OWNER_ROLE))
-      return message.reply("❌ Apenas Dono.");
-
-    const id = Date.now().toString();
-    const produtos = loadProdutos();
-
-    produtos[id] = {
-      nome: "Novo Produto",
-      descricao: "Defina a descrição",
-      imagem: "",
-      opcoes: []
-    };
-
-    saveProdutos(produtos);
-
-    return message.reply("✅ Produto criado.");
-  }
-
-  // ================= PAINEL PRODUTOS =================
+  /* ===== PAINEL PRODUTOS ===== */
 
   if (command === "painelprodutos") {
 
     const produtos = loadProdutos();
+    if (Object.keys(produtos).length === 0)
+      return message.reply("❌ Nenhum produto criado.");
 
     const select = new StringSelectMenuBuilder()
-      .setCustomId("painel_produtos")
-      .setPlaceholder("Selecione um produto");
+      .setCustomId("ver_produto")
+      .setPlaceholder("🛒 Escolha um produto");
 
     Object.entries(produtos).forEach(([id, p]) => {
       select.addOptions({
         label: p.nome,
+        description: p.descricao,
         value: id
       });
     });
@@ -238,6 +122,151 @@ client.on("messageCreate", async (message) => {
       components: [new ActionRowBuilder().addComponents(select)]
     });
   }
+
+  /* ===== ADMIN BASICO ===== */
+
+  if (command === "anunciar") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return;
+
+    const texto = message.content.slice(prefix.length + 9);
+    if (!texto) return;
+
+    const embed = new EmbedBuilder()
+      .setTitle("📢 Anúncio")
+      .setDescription(texto)
+      .setColor("Green");
+
+    message.channel.send({ embeds: [embed] });
+  }
+
+  if (command.startsWith("clear")) {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages))
+      return;
+
+    const qtd = parseInt(message.content.split(" ")[1]);
+    if (!qtd) return;
+
+    message.channel.bulkDelete(qtd);
+  }
+
+});
+
+/* =========================
+   INTERAÇÕES
+========================= */
+
+client.on("interactionCreate", async (interaction) => {
+
+  const produtos = loadProdutos();
+
+  /* ===== BOTÕES ADMIN ===== */
+
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "admin_criar") {
+
+      const modal = new ModalBuilder()
+        .setCustomId("modal_criar_produto")
+        .setTitle("Criar Produto");
+
+      const nome = new TextInputBuilder()
+        .setCustomId("nome")
+        .setLabel("Nome do Produto")
+        .setStyle(TextInputStyle.Short);
+
+      const desc = new TextInputBuilder()
+        .setCustomId("desc")
+        .setLabel("Descrição")
+        .setStyle(TextInputStyle.Paragraph);
+
+      const img = new TextInputBuilder()
+        .setCustomId("img")
+        .setLabel("URL da Imagem")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(nome),
+        new ActionRowBuilder().addComponents(desc),
+        new ActionRowBuilder().addComponents(img)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.customId.startsWith("comprar_")) {
+
+      const id = interaction.customId.split("_")[1];
+      const produto = produtos[id];
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`opcao_${id}`)
+        .setPlaceholder("Escolha o plano");
+
+      produto.opcoes.forEach((op, i) => {
+        select.addOptions({
+          label: op.nome,
+          description: `R$${op.preco} | Estoque: ${op.estoque}`,
+          value: i.toString()
+        });
+      });
+
+      return interaction.reply({
+        components: [new ActionRowBuilder().addComponents(select)],
+        ephemeral: true
+      });
+    }
+
+  }
+
+  /* ===== MODAL CRIAR PRODUTO ===== */
+
+  if (interaction.isModalSubmit()) {
+
+    if (interaction.customId === "modal_criar_produto") {
+
+      const id = Date.now().toString();
+
+      produtos[id] = {
+        nome: interaction.fields.getTextInputValue("nome"),
+        descricao: interaction.fields.getTextInputValue("desc"),
+        imagem: interaction.fields.getTextInputValue("img"),
+        opcoes: []
+      };
+
+      saveProdutos(produtos);
+
+      return interaction.reply("✅ Produto criado com sucesso!");
+    }
+  }
+
+  /* ===== SELECT MENU PRODUTO ===== */
+
+  if (interaction.isStringSelectMenu()) {
+
+    if (interaction.customId === "ver_produto") {
+
+      const produto = produtos[interaction.values[0]];
+
+      const embed = new EmbedBuilder()
+        .setTitle(produto.nome)
+        .setDescription(produto.descricao)
+        .setImage(produto.imagem || null)
+        .setColor("Blue");
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`comprar_${interaction.values[0]}`)
+          .setLabel("Comprar")
+          .setStyle(ButtonStyle.Success)
+      );
+
+      return interaction.reply({ embeds: [embed], components: [row] });
+    }
+
+  }
+
 });
 
 client.login(process.env.TOKEN);
