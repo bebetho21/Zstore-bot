@@ -26,11 +26,13 @@ const client = new Client({
 });
 
 // ========= CONFIG =========
-const STAFF_ROLE_ID = "1464846409139359784"; // COLOQUE AQUI
+const DONO_ID = "1464846406450942065";
+const STAFF_ROLE_ID = "1464846409139359784";
+
 const produtosPath = "./produtos.json";
 const ticketsPath = "./tickets.json";
 
-// ========= CRIAR ARQUIVOS AUTOMATICAMENTE =========
+// ========= CRIAR ARQUIVOS AUTOMÁTICOS =========
 if (!fs.existsSync(produtosPath)) {
   fs.writeFileSync(produtosPath, JSON.stringify([], null, 2));
 }
@@ -94,18 +96,14 @@ client.on("messageCreate", async (message) => {
 
     produtos.forEach((p) => {
       menu.addOptions({
-        label: p.titulo.substring(0, 100),
-        description: `R$ ${p.preco}`,
+        label: p.titulo,
+        description: `R$ ${p.preco}/mês`,
         value: p.id,
       });
     });
 
     const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({
-      content: "🛒 Selecione um produto:",
-      components: [row],
-    });
+    message.channel.send({ components: [row] });
   }
 });
 
@@ -176,7 +174,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const produtos = carregarProdutos();
     const produto = produtos.find(p => p.id === interaction.values[0]);
-
     if (!produto)
       return interaction.reply({ content: "❌ Produto não encontrado.", flags: 64 });
 
@@ -223,13 +220,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // ===== CRIAR TICKET =====
   if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
 
-    if (!interaction.guild.roles.cache.has(STAFF_ROLE_ID)) {
-      return interaction.reply({
-        content: "❌ ID do cargo staff inválido.",
-        flags: 64
-      });
-    }
-
     const produtoId = interaction.customId.split("_")[1];
     const produtos = carregarProdutos();
     const produto = produtos.find(p => p.id === produtoId);
@@ -261,43 +251,62 @@ client.on(Events.InteractionCreate, async (interaction) => {
             PermissionsBitField.Flags.SendMessages,
           ],
         },
+        {
+          id: DONO_ID,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+          ],
+        },
       ],
     });
 
     const embed = new EmbedBuilder()
-      .setTitle(`🛒 Produto: ${produto.titulo}`)
-      .setDescription(produto.descricao)
-      .addFields({ name: "💰 Preço", value: `R$ ${produto.preco}` });
+      .setColor("#2b2d31")
+      .setTitle("🛒 Novo Pedido Criado!")
+      .setDescription(
+        `👤 **Cliente:** ${interaction.user}\n` +
+        `📦 **Produto:** ${produto.titulo}\n` +
+        `💰 **Preço escolhido:** R$ ${produto.preco}\n\n` +
+        `⏳ Aguarde um administrador ou staff responder.\n` +
+        `❌ Não feche o ticket até finalizar a compra.`
+      );
 
-    if (produto.foto) embed.setImage(produto.foto);
+    const botoes = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Ir para o Ticket")
+        .setStyle(ButtonStyle.Link)
+        .setURL(`https://discord.com/channels/${interaction.guild.id}/${canal.id}`),
 
-    const fechar = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("fechar_ticket")
         .setLabel("🔒 Fechar Ticket")
         .setStyle(ButtonStyle.Danger)
     );
 
-    canal.send({
-      content: `Olá ${interaction.user}, aguarde um staff responder.`,
+    await canal.send({
+      content: `<@${DONO_ID}> <@&${STAFF_ROLE_ID}>`,
       embeds: [embed],
-      components: [fechar],
+      components: [botoes],
     });
 
-    interaction.reply({ content: `✅ Ticket criado: ${canal}`, flags: 64 });
+    interaction.reply({ content: `✅ Seu ticket foi criado: ${canal}`, flags: 64 });
   }
 
   // ===== FECHAR TICKET =====
   if (interaction.isButton() && interaction.customId === "fechar_ticket") {
 
-    if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+    const isDono = interaction.user.id === DONO_ID;
+    const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID);
+
+    if (!isDono && !isStaff) {
       return interaction.reply({
-        content: "❌ Apenas staff pode fechar.",
+        content: "❌ Apenas o dono ou staff pode fechar.",
         flags: 64
       });
     }
 
-    await interaction.reply("🔒 Fechando ticket...");
+    await interaction.reply("🔒 Fechando ticket em 3 segundos...");
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
     }, 3000);
