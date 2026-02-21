@@ -10,7 +10,6 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
-  PermissionsBitField,
   ChannelType
 } = require("discord.js");
 
@@ -22,205 +21,185 @@ const client = new Client({
   ]
 });
 
-const PREFIX = "!";
-const PRODUTOS_PATH = "./produtos.json";
-const CONFIG_PATH = "./config.json";
+const prefix = "!";
+const produtosFile = "./produtos.json";
 
-let criacoes = {};
-
-function loadJSON(path, def = {}) {
-  if (!fs.existsSync(path)) {
-    fs.writeFileSync(path, JSON.stringify(def, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(path));
+if (!fs.existsSync(produtosFile)) {
+  fs.writeFileSync(produtosFile, JSON.stringify({}));
 }
 
-function saveJSON(path, data) {
-  fs.writeFileSync(path, JSON.stringify(data, null, 2));
+function loadProdutos() {
+  return JSON.parse(fs.readFileSync(produtosFile));
+}
+
+function saveProdutos(data) {
+  fs.writeFileSync(produtosFile, JSON.stringify(data, null, 2));
 }
 
 client.once("ready", () => {
-  console.log(`🔥 Loja ULTRA Online como ${client.user.tag}`);
+  console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
 client.on("messageCreate", async (message) => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  if (!message.content.startsWith(prefix) || message.author.bot) return;
 
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+  const produtos = loadProdutos();
 
-  const produtos = loadJSON(PRODUTOS_PATH);
-  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null, cupons: {} });
+  // ================= COMANDOS =================
 
-  if (cmd === "comandos") {
+  if (command === "comandos") {
     return message.reply(`
-📦 COMANDOS
-
+📦 **Comandos do Bot**
 !criarproduto
-!listarprodutos
-!deletarproduto ID
-!addestoque ID quantidade
-!criarcupom NOME %
-!setstaff @cargo
-!setlogs #canal
+!addopcao <id> <nome> <duracao> <preco>
+!deletarproduto <id>
+!enviarproduto <id>
 !comandos
     `);
   }
 
-  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-    return message.reply("❌ Apenas administradores.");
+  // ================= CRIAR PRODUTO =================
 
-  if (cmd === "setstaff") {
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("Marque um cargo.");
-    config.staffRole = role.id;
-    saveJSON(CONFIG_PATH, config);
-    return message.reply("✅ Cargo staff definido.");
-  }
+  if (command === "criarproduto") {
+    const id = `produto_${Date.now()}`;
 
-  if (cmd === "setlogs") {
-    const canal = message.mentions.channels.first();
-    if (!canal) return message.reply("Marque um canal.");
-    config.logsChannel = canal.id;
-    saveJSON(CONFIG_PATH, config);
-    return message.reply("✅ Canal de logs definido.");
-  }
-
-  if (cmd === "criarcupom") {
-    const nome = args[0];
-    const desconto = parseInt(args[1]);
-    config.cupons[nome] = desconto;
-    saveJSON(CONFIG_PATH, config);
-    return message.reply("✅ Cupom criado.");
-  }
-
-  if (cmd === "listarprodutos") {
-    return message.reply(Object.keys(produtos).join("\n") || "Nenhum produto.");
-  }
-
-  if (cmd === "deletarproduto") {
-    delete produtos[args[0]];
-    saveJSON(PRODUTOS_PATH, produtos);
-    return message.reply("🗑️ Produto deletado.");
-  }
-
-  if (cmd === "addestoque") {
-    const id = args[0];
-    const qtd = parseInt(args[1]);
-    produtos[id].estoque = (produtos[id].estoque || 0) + qtd;
-    saveJSON(PRODUTOS_PATH, produtos);
-    return message.reply("📦 Estoque atualizado.");
-  }
-
-  if (cmd === "criarproduto") {
-    criacoes[message.author.id] = {
-      nome: "Novo Produto",
-      descricao: "Descrição",
-      imagem: null,
-      opcoes: [],
-      estoque: 0,
-      avaliacoes: []
+    produtos[id] = {
+      titulo: "Novo Produto",
+      descricao: "Edite depois com !addopcao",
+      imagem: "",
+      canal: null,
+      opcoes: []
     };
-    return message.reply("Produto criado temporariamente. Edite no código se quiser personalizar.");
+
+    saveProdutos(produtos);
+
+    const menu = new ChannelSelectMenuBuilder()
+      .setCustomId(`canal_${id}`)
+      .setPlaceholder("Selecione o canal para publicar")
+      .addChannelTypes(ChannelType.GuildText);
+
+    const row = new ActionRowBuilder().addComponents(menu);
+
+    await message.reply({
+      content: `✅ Produto criado com ID: **${id}**\nAgora selecione o canal para publicar.`,
+      components: [row]
+    });
+  }
+
+  // ================= ADD OPÇÃO =================
+
+  if (command === "addopcao") {
+    const [id, nome, duracao, preco] = args;
+    if (!produtos[id]) return message.reply("❌ Produto não encontrado.");
+
+    produtos[id].opcoes.push({ nome, duracao, preco });
+    saveProdutos(produtos);
+
+    return message.reply("✅ Opção adicionada com sucesso.");
+  }
+
+  // ================= DELETAR =================
+
+  if (command === "deletarproduto") {
+    const id = args[0];
+    if (!produtos[id]) return message.reply("❌ Produto não encontrado.");
+
+    delete produtos[id];
+    saveProdutos(produtos);
+
+    return message.reply("🗑 Produto deletado.");
+  }
+
+  // ================= ENVIAR PRODUTO =================
+
+  if (command === "enviarproduto") {
+    const id = args[0];
+    if (!produtos[id]) return message.reply("❌ Produto não encontrado.");
+    if (!produtos[id].canal) return message.reply("❌ Escolha o canal primeiro.");
+
+    const canal = message.guild.channels.cache.get(produtos[id].canal);
+    if (!canal) return message.reply("❌ Canal inválido.");
+
+    const embed = new EmbedBuilder()
+      .setTitle(produtos[id].titulo)
+      .setDescription(produtos[id].descricao)
+      .setColor("Blue")
+      .setImage(produtos[id].imagem || null);
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`comprar_${id}`)
+      .setPlaceholder("🛒 Escolha o plano");
+
+    produtos[id].opcoes.forEach((op, i) => {
+      select.addOptions({
+        label: op.nome,
+        description: `${op.duracao} • R$${op.preco}`,
+        value: `${i}`
+      });
+    });
+
+    const row = new ActionRowBuilder().addComponents(select);
+
+    canal.send({ embeds: [embed], components: [row] });
+
+    return message.reply("📤 Produto enviado.");
   }
 });
 
+// ================= INTERAÇÕES =================
+
 client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isStringSelectMenu() && !interaction.isChannelSelectMenu() && !interaction.isButton()) return;
 
-  const produtos = loadJSON(PRODUTOS_PATH);
-  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null });
+  const produtos = loadProdutos();
 
-  // COMPRA
-  if (interaction.isStringSelectMenu()) {
+  // Selecionar canal
+  if (interaction.customId.startsWith("canal_")) {
+    const id = interaction.customId.replace("canal_", "");
+    produtos[id].canal = interaction.values[0];
+    saveProdutos(produtos);
 
-    if (interaction.customId.startsWith("buy_")) {
-
-      const id = interaction.customId.split("_")[1];
-      const produto = produtos[id];
-
-      if (!produto || produto.estoque <= 0)
-        return interaction.reply({ content: "❌ Sem estoque.", ephemeral: true });
-
-      const canal = await interaction.guild.channels.create({
-        name: "ticket-" + interaction.user.username,
-        type: ChannelType.GuildText,
-        topic: interaction.user.id,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] }
-        ]
-      });
-
-      const fechar = new ButtonBuilder()
-        .setCustomId("fechar_ticket_" + id)
-        .setLabel("🔒 Fechar Ticket")
-        .setStyle(ButtonStyle.Danger);
-
-      canal.send({
-        content: `🎟️ ${interaction.user}`,
-        components: [new ActionRowBuilder().addComponents(fechar)]
-      });
-
-      produto.estoque -= 1;
-      saveJSON(PRODUTOS_PATH, produtos);
-
-      return interaction.reply({ content: `✅ Ticket criado: ${canal}`, ephemeral: true });
-    }
+    return interaction.reply({ content: "✅ Canal salvo.", ephemeral: true });
   }
 
-  // FECHAR TICKET
-  if (interaction.isButton()) {
+  // Compra
+  if (interaction.customId.startsWith("comprar_")) {
+    const id = interaction.customId.replace("comprar_", "");
+    const opcao = produtos[id].opcoes[interaction.values[0]];
 
-    if (interaction.customId.startsWith("fechar_ticket_")) {
+    const avaliarRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("star_1").setLabel("⭐").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("star_2").setLabel("⭐⭐").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("star_3").setLabel("⭐⭐⭐").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("star_4").setLabel("⭐⭐⭐⭐").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("star_5").setLabel("⭐⭐⭐⭐⭐").setStyle(ButtonStyle.Success)
+    );
 
-      const produtoId = interaction.customId.split("_")[2];
-      const produto = produtos[produtoId];
+    return interaction.reply({
+      content: `✅ Compra simulada de **${opcao.nome}**.\nAvalie sua experiência:`,
+      components: [avaliarRow],
+      ephemeral: true
+    });
+  }
 
-      await interaction.reply("🔒 Ticket fechado.");
+  // Avaliação
+  if (interaction.customId.startsWith("star_")) {
+    const estrelas = interaction.customId.replace("star_", "");
+    const canalAval = interaction.guild.channels.cache.get("1464846455218114683");
 
-      const avaliarRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_1").setLabel("⭐ 1").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_2").setLabel("⭐ 2").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_3").setLabel("⭐ 3").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_4").setLabel("⭐ 4").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_5").setLabel("⭐ 5").setStyle(ButtonStyle.Success)
-      );
+    if (!canalAval) return interaction.reply({ content: "❌ Canal #avaliacoes não encontrado.", ephemeral: true });
 
-      interaction.channel.send({
-        content: `${interaction.user}, avalie sua compra:`,
-        components: [avaliarRow]
-      });
-    }
+    const embed = new EmbedBuilder()
+      .setTitle("⭐ Nova Avaliação")
+      .setDescription(`Usuário: ${interaction.user}\nNota: ${"⭐".repeat(estrelas)}`)
+      .setColor("Gold")
+      .setTimestamp();
 
-    // AVALIAÇÃO
-    if (interaction.customId.startsWith("avaliar_")) {
+    canalAval.send({ embeds: [embed] });
 
-      const parts = interaction.customId.split("_");
-      const produtoId = parts[1];
-      const nota = parseInt(parts[2]);
-      const produto = produtos[produtoId];
-
-      if (!produto.avaliacoes) produto.avaliacoes = [];
-
-      if (produto.avaliacoes.find(a => a.user === interaction.user.id))
-        return interaction.reply({ content: "Você já avaliou.", ephemeral: true });
-
-      produto.avaliacoes.push({ user: interaction.user.id, nota });
-
-      saveJSON(PRODUTOS_PATH, produtos);
-
-      const media =
-        produto.avaliacoes.reduce((a, b) => a + b.nota, 0) /
-        produto.avaliacoes.length;
-
-      if (config.logsChannel) {
-        const log = interaction.guild.channels.cache.get(config.logsChannel);
-        if (log)
-          log.send(`⭐ Nova avaliação: ${nota} estrelas\nProduto: ${produto.nome}\nMédia: ${media.toFixed(2)}`);
-      }
-
-      return interaction.reply({ content: "✅ Avaliação registrada!", ephemeral: true });
-    }
+    return interaction.reply({ content: "✅ Avaliação enviada com sucesso!", ephemeral: true });
   }
 });
 
