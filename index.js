@@ -13,7 +13,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ChannelType
+  ChannelType,
+  PermissionsBitField
 } = require("discord.js");
 
 const client = new Client({
@@ -27,7 +28,9 @@ const client = new Client({
 
 const prefix = "!";
 const produtosFile = "./produtos.json";
-const FEEDBACK_CHANNEL_ID = "1464846455218114683";
+
+const OWNER_ROLE_NAME = "Dono";
+const CLIENT_ROLE_NAME = "Cliente";
 
 if (!fs.existsSync(produtosFile)) {
   fs.writeFileSync(produtosFile, JSON.stringify({}));
@@ -50,27 +53,12 @@ client.on("messageCreate", async (message) => {
 
   const command = message.content.slice(prefix.length).toLowerCase();
 
-  // COMANDOS
-  if (command === "comandos") {
-    return message.reply(`
-📦 **Comandos**
-!criarproduto
-!clientes (dar cargo manual)
-!comandos
-    `);
-  }
+  // ================= CRIAR PRODUTO =================
 
-  // DAR CARGO MANUAL
-  if (command === "clientes") {
-    const cargo = message.guild.roles.cache.find(r => r.name === "Clientes");
-    if (!cargo) return message.reply("Cargo Clientes não encontrado.");
-
-    await message.member.roles.add(cargo);
-    return message.reply("✅ Cargo Clientes adicionado.");
-  }
-
-  // CRIAR PRODUTO
   if (command === "criarproduto") {
+
+    if (!message.member.roles.cache.some(r => r.name === OWNER_ROLE_NAME))
+      return message.reply("❌ Apenas Donos podem usar.");
 
     const id = Date.now().toString();
     const produtos = loadProdutos();
@@ -79,7 +67,6 @@ client.on("messageCreate", async (message) => {
       nome: "Novo Produto",
       descricao: "Defina a descrição",
       imagem: "",
-      canal: null,
       opcoes: []
     };
 
@@ -98,7 +85,7 @@ client.on("messageCreate", async (message) => {
       new ButtonBuilder().setCustomId(`publicar_${id}`).setLabel("Publicar").setStyle(ButtonStyle.Danger)
     );
 
-    return message.reply({ embeds: [embed], components: [row] });
+    message.reply({ embeds: [embed], components: [row] });
   }
 });
 
@@ -106,76 +93,60 @@ client.on("interactionCreate", async (interaction) => {
 
   const produtos = loadProdutos();
 
-  // BOTÕES
+  // ================= BOTÕES =================
+
   if (interaction.isButton()) {
+
+    if (interaction.customId.startsWith("star_")) {
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const estrelas = interaction.customId.split("_")[1];
+
+      const canal = interaction.guild.channels.cache.find(c => c.name === "💖・feedbacks");
+
+      if (canal) {
+        const embed = new EmbedBuilder()
+          .setTitle("⭐ Nova Avaliação")
+          .setDescription(`Usuário: ${interaction.user}\nNota: ${"⭐".repeat(estrelas)}`)
+          .setColor("Gold");
+
+        canal.send({ embeds: [embed] });
+      }
+
+      return interaction.editReply("✅ Avaliação enviada!");
+    }
+
+    if (interaction.customId.startsWith("fechar_ticket")) {
+
+      if (!interaction.member.roles.cache.some(r => r.name === OWNER_ROLE_NAME))
+        return interaction.reply({ content: "❌ Apenas Dono pode fechar.", ephemeral: true });
+
+      return interaction.channel.delete();
+    }
 
     const [tipo, id] = interaction.customId.split("_");
     if (!produtos[id]) return;
 
-    // NOME
-    if (tipo === "nome") {
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_nome_${id}`)
-        .setTitle("Editar Nome");
-
-      const input = new TextInputBuilder()
-        .setCustomId("nome_input")
-        .setLabel("Nome do produto")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return interaction.showModal(modal);
-    }
-
-    // DESCRIÇÃO
-    if (tipo === "desc") {
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_desc_${id}`)
-        .setTitle("Editar Descrição");
-
-      const input = new TextInputBuilder()
-        .setCustomId("desc_input")
-        .setLabel("Descrição")
-        .setStyle(TextInputStyle.Paragraph);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return interaction.showModal(modal);
-    }
-
-    // IMAGEM
-    if (tipo === "img") {
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_img_${id}`)
-        .setTitle("URL da Imagem");
-
-      const input = new TextInputBuilder()
-        .setCustomId("img_input")
-        .setLabel("URL")
-        .setStyle(TextInputStyle.Short);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-      return interaction.showModal(modal);
-    }
-
-    // OPÇÃO COM ESTOQUE
     if (tipo === "opcao") {
+
       const modal = new ModalBuilder()
         .setCustomId(`modal_opcao_${id}`)
         .setTitle("Adicionar Opção");
 
       const nome = new TextInputBuilder()
-        .setCustomId("op_nome")
-        .setLabel("Nome da opção")
+        .setCustomId("nome")
+        .setLabel("Nome")
         .setStyle(TextInputStyle.Short);
 
       const preco = new TextInputBuilder()
-        .setCustomId("op_preco")
+        .setCustomId("preco")
         .setLabel("Preço")
         .setStyle(TextInputStyle.Short);
 
       const estoque = new TextInputBuilder()
-        .setCustomId("op_estoque")
-        .setLabel("Quantidade em estoque")
+        .setCustomId("estoque")
+        .setLabel("Estoque")
         .setStyle(TextInputStyle.Short);
 
       modal.addComponents(
@@ -187,118 +158,108 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.showModal(modal);
     }
 
-    // PUBLICAR
     if (tipo === "publicar") {
-      const menu = new ChannelSelectMenuBuilder()
-        .setCustomId(`canal_${id}`)
-        .setPlaceholder("Selecione o canal")
-        .addChannelTypes(ChannelType.GuildText);
 
-      return interaction.reply({
-        content: "Escolha o canal:",
-        components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`comprar_${id}`)
+        .setPlaceholder("🛒 Escolha o plano");
+
+      produtos[id].opcoes.forEach((op, i) => {
+        select.addOptions({
+          label: op.nome,
+          description: `R$${op.preco} | Estoque: ${op.estoque}`,
+          value: i.toString()
+        });
       });
-    }
-
-    // AVALIAÇÃO
-    if (interaction.customId.startsWith("star_")) {
-
-      const estrelas = interaction.customId.split("_")[1];
-      const canal = interaction.guild.channels.cache.get(FEEDBACK_CHANNEL_ID);
 
       const embed = new EmbedBuilder()
-        .setTitle("⭐ Nova Avaliação")
-        .setDescription(`Usuário: ${interaction.user}\nNota: ${"⭐".repeat(estrelas)}`)
-        .setColor("Gold");
+        .setTitle(produtos[id].nome)
+        .setDescription(produtos[id].descricao)
+        .setImage(produtos[id].imagem || null)
+        .setColor("Blue");
 
-      canal.send({ embeds: [embed] });
+      interaction.channel.send({
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(select)]
+      });
 
-      return interaction.reply({ content: "Avaliação enviada!", ephemeral: true });
+      return interaction.reply({ content: "Produto publicado!", ephemeral: true });
     }
   }
 
-  // MODAIS
+  // ================= MODAL =================
+
   if (interaction.isModalSubmit()) {
 
     const id = interaction.customId.split("_")[2];
     if (!produtos[id]) return;
 
-    if (interaction.customId.startsWith("modal_nome_")) {
-      produtos[id].nome = interaction.fields.getTextInputValue("nome_input");
-    }
-
-    if (interaction.customId.startsWith("modal_desc_")) {
-      produtos[id].descricao = interaction.fields.getTextInputValue("desc_input");
-    }
-
-    if (interaction.customId.startsWith("modal_img_")) {
-      produtos[id].imagem = interaction.fields.getTextInputValue("img_input");
-    }
-
-    if (interaction.customId.startsWith("modal_opcao_")) {
-      produtos[id].opcoes.push({
-        nome: interaction.fields.getTextInputValue("op_nome"),
-        preco: interaction.fields.getTextInputValue("op_preco"),
-        estoque: parseInt(interaction.fields.getTextInputValue("op_estoque"))
-      });
-    }
-
-    saveProdutos(produtos);
-    return interaction.reply({ content: "Salvo com sucesso!", ephemeral: true });
-  }
-
-  // PUBLICAÇÃO
-  if (interaction.isChannelSelectMenu()) {
-
-    const id = interaction.customId.split("_")[1];
-    produtos[id].canal = interaction.values[0];
-    saveProdutos(produtos);
-
-    const canal = interaction.guild.channels.cache.get(produtos[id].canal);
-
-    const embed = new EmbedBuilder()
-      .setTitle(produtos[id].nome)
-      .setDescription(produtos[id].descricao)
-      .setImage(produtos[id].imagem || null)
-      .setColor("Blue");
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`comprar_${id}`)
-      .setPlaceholder("🛒 Escolha o plano");
-
-    produtos[id].opcoes.forEach((op, i) => {
-      select.addOptions({
-        label: `${op.nome}`,
-        description: `R$${op.preco} | Estoque: ${op.estoque}`,
-        value: i.toString()
-      });
+    produtos[id].opcoes.push({
+      nome: interaction.fields.getTextInputValue("nome"),
+      preco: interaction.fields.getTextInputValue("preco"),
+      estoque: parseInt(interaction.fields.getTextInputValue("estoque"))
     });
 
-    canal.send({
-      embeds: [embed],
-      components: [new ActionRowBuilder().addComponents(select)]
-    });
-
-    return interaction.reply({ content: "Produto publicado!", ephemeral: true });
+    saveProdutos(produtos);
+    return interaction.reply({ content: "Opção adicionada!", ephemeral: true });
   }
 
-  // COMPRA
+  // ================= COMPRA =================
+
   if (interaction.isStringSelectMenu()) {
 
     const id = interaction.customId.split("_")[1];
     const opcao = produtos[id].opcoes[interaction.values[0]];
 
     if (opcao.estoque <= 0)
-      return interaction.reply({ content: "❌ Produto sem estoque.", ephemeral: true });
+      return interaction.reply({ content: "❌ Sem estoque.", ephemeral: true });
 
     opcao.estoque -= 1;
     saveProdutos(produtos);
 
-    const cargo = interaction.guild.roles.cache.find(r => r.name === "Clientes");
+    const cargo = interaction.guild.roles.cache.find(r => r.name === CLIENT_ROLE_NAME);
     if (cargo) await interaction.member.roles.add(cargo);
 
-    const row = new ActionRowBuilder().addComponents(
+    // CRIAR CATEGORIA
+    const categoria = await interaction.guild.channels.create({
+      name: `ticket-${interaction.user.username}`,
+      type: ChannelType.GuildCategory
+    });
+
+    // CRIAR CANAL DENTRO
+    const canal = await interaction.guild.channels.create({
+      name: "compra",
+      type: ChannelType.GuildText,
+      parent: categoria.id,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.user.id,
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.guild.roles.cache.find(r => r.name === OWNER_ROLE_NAME).id,
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        }
+      ]
+    });
+
+    const fecharBtn = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("fechar_ticket")
+        .setLabel("Fechar Ticket")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    canal.send({
+      content: `🎟 ${interaction.user} aguarde um Dono responder.\nProduto: ${opcao.nome}`,
+      components: [fecharBtn]
+    });
+
+    const avaliarRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("star_1").setLabel("⭐").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("star_2").setLabel("⭐⭐").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("star_3").setLabel("⭐⭐⭐").setStyle(ButtonStyle.Primary),
@@ -307,8 +268,8 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     return interaction.reply({
-      content: `✅ Compra realizada! Cargo Clientes adicionado.\nEstoque restante: ${opcao.estoque}\nAvalie sua experiência:`,
-      components: [row],
+      content: `✅ Compra realizada! Cargo Cliente adicionado.\nAvalie sua experiência:`,
+      components: [avaliarRow],
       ephemeral: true
     });
   }
