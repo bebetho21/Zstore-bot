@@ -11,10 +11,7 @@ const {
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
   PermissionsBitField,
-  ChannelType,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
+  ChannelType
 } = require("discord.js");
 
 const client = new Client({
@@ -31,9 +28,9 @@ const CONFIG_PATH = "./config.json";
 
 let criacoes = {};
 
-function loadJSON(path, defaultData = {}) {
+function loadJSON(path, def = {}) {
   if (!fs.existsSync(path)) {
-    fs.writeFileSync(path, JSON.stringify(defaultData, null, 2));
+    fs.writeFileSync(path, JSON.stringify(def, null, 2));
   }
   return JSON.parse(fs.readFileSync(path));
 }
@@ -43,7 +40,7 @@ function saveJSON(path, data) {
 }
 
 client.once("ready", () => {
-  console.log(`🔥 Loja PRO Online como ${client.user.tag}`);
+  console.log(`🔥 Loja ULTRA Online como ${client.user.tag}`);
 });
 
 client.on("messageCreate", async (message) => {
@@ -57,16 +54,15 @@ client.on("messageCreate", async (message) => {
 
   if (cmd === "comandos") {
     return message.reply(`
-📦 **COMANDOS DO BOT**
+📦 COMANDOS
 
-!criarproduto  
-!listarprodutos  
-!editarproduto ID  
-!deletarproduto ID  
-!addestoque ID quantidade  
-!criarcupom NOME porcentagem  
-!setstaff @cargo  
-!setlogs #canal  
+!criarproduto
+!listarprodutos
+!deletarproduto ID
+!addestoque ID quantidade
+!criarcupom NOME %
+!setstaff @cargo
+!setlogs #canal
 !comandos
     `);
   }
@@ -93,22 +89,17 @@ client.on("messageCreate", async (message) => {
   if (cmd === "criarcupom") {
     const nome = args[0];
     const desconto = parseInt(args[1]);
-    if (!nome || !desconto) return message.reply("Use: !criarcupom NOME 10");
     config.cupons[nome] = desconto;
     saveJSON(CONFIG_PATH, config);
     return message.reply("✅ Cupom criado.");
   }
 
   if (cmd === "listarprodutos") {
-    const lista = Object.keys(produtos);
-    if (!lista.length) return message.reply("Nenhum produto.");
-    return message.reply("📦 Produtos:\n" + lista.join("\n"));
+    return message.reply(Object.keys(produtos).join("\n") || "Nenhum produto.");
   }
 
   if (cmd === "deletarproduto") {
-    const id = args[0];
-    if (!produtos[id]) return message.reply("Produto não existe.");
-    delete produtos[id];
+    delete produtos[args[0]];
     saveJSON(PRODUTOS_PATH, produtos);
     return message.reply("🗑️ Produto deletado.");
   }
@@ -116,115 +107,30 @@ client.on("messageCreate", async (message) => {
   if (cmd === "addestoque") {
     const id = args[0];
     const qtd = parseInt(args[1]);
-    if (!produtos[id]) return message.reply("Produto não existe.");
     produtos[id].estoque = (produtos[id].estoque || 0) + qtd;
     saveJSON(PRODUTOS_PATH, produtos);
     return message.reply("📦 Estoque atualizado.");
   }
 
   if (cmd === "criarproduto") {
-
     criacoes[message.author.id] = {
-      nome: null,
-      descricao: null,
+      nome: "Novo Produto",
+      descricao: "Descrição",
       imagem: null,
       opcoes: [],
-      estoque: 0
+      estoque: 0,
+      avaliacoes: []
     };
-
-    const embed = new EmbedBuilder()
-      .setTitle("📦 Criar Produto")
-      .setDescription("Configure usando os botões.")
-      .setColor("#2B2D31");
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("set_nome").setLabel("Nome").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("set_desc").setLabel("Descrição").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("set_img").setLabel("Imagem").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("add_opcao").setLabel("Adicionar Opção").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("publicar_produto").setLabel("Publicar").setStyle(ButtonStyle.Danger)
-    );
-
-    return message.reply({ embeds: [embed], components: [row] });
+    return message.reply("Produto criado temporariamente. Edite no código se quiser personalizar.");
   }
 });
 
 client.on("interactionCreate", async (interaction) => {
 
   const produtos = loadJSON(PRODUTOS_PATH);
-  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null, cupons: {} });
+  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null });
 
-  if (interaction.isButton()) {
-
-    const userId = interaction.user.id;
-
-    if (interaction.customId === "publicar_produto") {
-
-      const select = new ChannelSelectMenuBuilder()
-        .setCustomId("select_canal")
-        .setPlaceholder("Escolha o canal")
-        .addChannelTypes(ChannelType.GuildText);
-
-      return interaction.reply({
-        content: "Selecione o canal:",
-        components: [new ActionRowBuilder().addComponents(select)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.customId === "fechar_ticket") {
-
-      const staff = config.staffRole;
-      if (
-        interaction.member.roles.cache.has(staff) ||
-        interaction.user.id === interaction.channel.topic
-      ) {
-        await interaction.reply("🔒 Fechando...");
-        setTimeout(() => interaction.channel.delete(), 3000);
-      } else {
-        interaction.reply({ content: "❌ Apenas staff.", ephemeral: true });
-      }
-    }
-  }
-
-  if (interaction.isChannelSelectMenu()) {
-
-    const canal = interaction.channels.first();
-    const userId = interaction.user.id;
-    const produto = criacoes[userId];
-
-    const id = "produto_" + Date.now();
-    produtos[id] = produto;
-    saveJSON(PRODUTOS_PATH, produtos);
-
-    const embed = new EmbedBuilder()
-      .setTitle(produto.nome)
-      .setDescription(produto.descricao)
-      .setImage(produto.imagem)
-      .setColor("#2B2D31");
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId("buy_" + id)
-      .setPlaceholder("🛒 Escolha o plano");
-
-    produto.opcoes.forEach(op => {
-      select.addOptions({
-        label: op.label,
-        description: `${op.descricao} • 💰 ${op.preco}`,
-        value: op.value
-      });
-    });
-
-    canal.send({
-      embeds: [embed],
-      components: [new ActionRowBuilder().addComponents(select)]
-    });
-
-    delete criacoes[userId];
-
-    return interaction.reply({ content: "✅ Produto publicado!", ephemeral: true });
-  }
-
+  // COMPRA
   if (interaction.isStringSelectMenu()) {
 
     if (interaction.customId.startsWith("buy_")) {
@@ -232,8 +138,8 @@ client.on("interactionCreate", async (interaction) => {
       const id = interaction.customId.split("_")[1];
       const produto = produtos[id];
 
-      if (!produto.estoque || produto.estoque <= 0)
-        return interaction.reply({ content: "❌ Produto sem estoque.", ephemeral: true });
+      if (!produto || produto.estoque <= 0)
+        return interaction.reply({ content: "❌ Sem estoque.", ephemeral: true });
 
       const canal = await interaction.guild.channels.create({
         name: "ticket-" + interaction.user.username,
@@ -246,8 +152,8 @@ client.on("interactionCreate", async (interaction) => {
       });
 
       const fechar = new ButtonBuilder()
-        .setCustomId("fechar_ticket")
-        .setLabel("🔒 Fechar")
+        .setCustomId("fechar_ticket_" + id)
+        .setLabel("🔒 Fechar Ticket")
         .setStyle(ButtonStyle.Danger);
 
       canal.send({
@@ -258,13 +164,62 @@ client.on("interactionCreate", async (interaction) => {
       produto.estoque -= 1;
       saveJSON(PRODUTOS_PATH, produtos);
 
+      return interaction.reply({ content: `✅ Ticket criado: ${canal}`, ephemeral: true });
+    }
+  }
+
+  // FECHAR TICKET
+  if (interaction.isButton()) {
+
+    if (interaction.customId.startsWith("fechar_ticket_")) {
+
+      const produtoId = interaction.customId.split("_")[2];
+      const produto = produtos[produtoId];
+
+      await interaction.reply("🔒 Ticket fechado.");
+
+      const avaliarRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_1").setLabel("⭐ 1").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_2").setLabel("⭐ 2").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_3").setLabel("⭐ 3").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_4").setLabel("⭐ 4").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("avaliar_" + produtoId + "_5").setLabel("⭐ 5").setStyle(ButtonStyle.Success)
+      );
+
+      interaction.channel.send({
+        content: `${interaction.user}, avalie sua compra:`,
+        components: [avaliarRow]
+      });
+    }
+
+    // AVALIAÇÃO
+    if (interaction.customId.startsWith("avaliar_")) {
+
+      const parts = interaction.customId.split("_");
+      const produtoId = parts[1];
+      const nota = parseInt(parts[2]);
+      const produto = produtos[produtoId];
+
+      if (!produto.avaliacoes) produto.avaliacoes = [];
+
+      if (produto.avaliacoes.find(a => a.user === interaction.user.id))
+        return interaction.reply({ content: "Você já avaliou.", ephemeral: true });
+
+      produto.avaliacoes.push({ user: interaction.user.id, nota });
+
+      saveJSON(PRODUTOS_PATH, produtos);
+
+      const media =
+        produto.avaliacoes.reduce((a, b) => a + b.nota, 0) /
+        produto.avaliacoes.length;
+
       if (config.logsChannel) {
-        const logChannel = interaction.guild.channels.cache.get(config.logsChannel);
-        if (logChannel)
-          logChannel.send(`🛒 Compra: ${interaction.user.tag} comprou ${produto.nome}`);
+        const log = interaction.guild.channels.cache.get(config.logsChannel);
+        if (log)
+          log.send(`⭐ Nova avaliação: ${nota} estrelas\nProduto: ${produto.nome}\nMédia: ${media.toFixed(2)}`);
       }
 
-      return interaction.reply({ content: `✅ Ticket criado: ${canal}`, ephemeral: true });
+      return interaction.reply({ content: "✅ Avaliação registrada!", ephemeral: true });
     }
   }
 });
