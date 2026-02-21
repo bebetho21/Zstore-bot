@@ -1,239 +1,276 @@
-require("dotenv").config()
-const fs = require("fs")
+require("dotenv").config();
+const fs = require("fs");
 
 const {
-Client,
-GatewayIntentBits,
-EmbedBuilder,
-ActionRowBuilder,
-ButtonBuilder,
-ButtonStyle,
-StringSelectMenuBuilder,
-ChannelType,
-PermissionsBitField
-} = require("discord.js")
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ChannelType,
+  PermissionsBitField,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  Events,
+} = require("discord.js");
 
 const client = new Client({
-intents:[
-GatewayIntentBits.Guilds,
-GatewayIntentBits.GuildMessages,
-GatewayIntentBits.MessageContent
-]})
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
 
-let produtos = fs.existsSync("produtos.json") ? JSON.parse(fs.readFileSync("produtos.json")) : []
-let pagamentoPix = {}
+const STAFF_ROLE_ID = "1464846409139359784";
+const produtosPath = "./produtos.json";
+const ticketCounterPath = "./tickets.json";
 
-client.on("ready",()=>{
-console.log("ONLINE")
-})
-
-client.on("messageCreate", async(message)=>{
-
-if(message.author.bot) return
-
-// COMANDOS
-if(message.content === "!comandosbot"){
-return message.reply(`
-!criarproduto
-!enviarproduto
-!cadastrarpix
-!chave
-!confirmado
-`)
+if (!fs.existsSync(ticketCounterPath)) {
+  fs.writeFileSync(ticketCounterPath, JSON.stringify({ count: 0 }));
 }
 
-// CADASTRAR PIX
-if(message.content === "!cadastrarpix"){
-
-if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Apenas admin")
-
-const perguntar = async(pergunta)=>{
-await message.channel.send(pergunta)
-const filtro = m=>m.author.id === message.author.id
-const coletado = await message.channel.awaitMessages({filter:filtro,max:1})
-return coletado.first().content
+function carregarProdutos() {
+  return JSON.parse(fs.readFileSync(produtosPath));
 }
 
-pagamentoPix.titulo = await perguntar("Título:")
-pagamentoPix.qr = await perguntar("Link do QR:")
-pagamentoPix.chave = await perguntar("Chave Pix:")
-
-message.reply("✅ Pix cadastrado")
+function salvarProdutos(produtos) {
+  fs.writeFileSync(produtosPath, JSON.stringify(produtos, null, 2));
 }
 
-// MOSTRAR PIX
-if(message.content === "!chave"){
-
-const embed = new EmbedBuilder()
-.setTitle(pagamentoPix.titulo)
-.setDescription(`\`\`\`${pagamentoPix.chave}\`\`\``)
-.setImage(pagamentoPix.qr)
-
-message.channel.send({embeds:[embed]})
+function gerarNumeroTicket() {
+  const data = JSON.parse(fs.readFileSync(ticketCounterPath));
+  data.count++;
+  fs.writeFileSync(ticketCounterPath, JSON.stringify(data, null, 2));
+  return data.count.toString().padStart(3, "0");
 }
 
-if(message.content === "!confirmado"){
-message.delete()
-}
+client.on("ready", () => {
+  console.log(`✅ Bot online como ${client.user.tag}`);
+});
 
-// CRIAR PRODUTO
-if(message.content === "!criarproduto"){
 
-const perguntar = async(pergunta)=>{
-await message.channel.send(pergunta)
-const filtro = m=>m.author.id === message.author.id
-const coletado = await message.channel.awaitMessages({filter:filtro,max:1})
-return coletado.first().content
-}
+// ========================
+// CRIAR NOVO PRODUTO
+// ========================
+client.on("messageCreate", async (message) => {
+  if (message.content === "!novoproduto") {
+    const embed = new EmbedBuilder()
+      .setTitle("🛠 Criar Novo Produto")
+      .setDescription("Clique abaixo para configurar o produto.");
 
-let nome = await perguntar("Nome:")
-let descricao = await perguntar("Descrição:")
-let preco = await perguntar("Preço:")
-let estoque = await perguntar("Estoque:")
-let imagem = await perguntar("Link da imagem:")
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("criar_produto")
+        .setLabel("Criar Produto")
+        .setStyle(ButtonStyle.Primary)
+    );
 
-// SELECT MENU CANAIS
-let canais = message.guild.channels.cache
-.filter(c=>c.type===ChannelType.GuildText)
-.map(c=>{
-return {
-label:c.name.length<5?c.name+"....":c.name,
-value:c.id,
-description:"Selecionar canal"
-}})
+    message.channel.send({ embeds: [embed], components: [row] });
+  }
 
-const menu = new StringSelectMenuBuilder()
-.setCustomId("canal_produto")
-.setPlaceholder("Pesquisar canal")
-.addOptions(canais.slice(0,25))
+  if (message.content === "!postarproduto") {
+    const produtos = carregarProdutos();
+    if (produtos.length === 0)
+      return message.reply("❌ Nenhum produto salvo.");
 
-const row = new ActionRowBuilder().addComponents(menu)
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId("selecionar_produto_postar")
+      .setPlaceholder("Selecione um produto");
 
-await message.channel.send({content:"Selecione o canal:",components:[row]})
+    produtos.forEach((p) => {
+      menu.addOptions({
+        label: p.titulo,
+        description: `R$ ${p.preco}`,
+        value: p.id,
+      });
+    });
 
-const collector = message.channel.createMessageComponentCollector({time:60000})
+    const row = new ActionRowBuilder().addComponents(menu);
+    message.channel.send({
+      content: "📦 Escolha um produto para postar:",
+      components: [row],
+    });
+  }
+});
 
-collector.on("collect", async(i)=>{
 
-if(i.customId==="canal_produto"){
+// ========================
+// INTERAÇÕES
+// ========================
+client.on(Events.InteractionCreate, async (interaction) => {
 
-produtos.push({
-id:Date.now().toString(),
-nome,
-descricao,
-preco,
-estoque,
-imagem,
-canal:i.values[0]
-})
+  // Modal criação produto
+  if (interaction.isButton() && interaction.customId === "criar_produto") {
 
-fs.writeFileSync("produtos.json",JSON.stringify(produtos,null,2))
+    const modal = new ModalBuilder()
+      .setCustomId("modal_produto")
+      .setTitle("Novo Produto");
 
-await i.reply({content:"✅ Produto criado",ephemeral:true})
-collector.stop()
-}
-})
-}
+    const titulo = new TextInputBuilder()
+      .setCustomId("titulo")
+      .setLabel("Título")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-// ENVIAR PRODUTO
-if(message.content === "!enviarproduto"){
+    const descricao = new TextInputBuilder()
+      .setCustomId("descricao")
+      .setLabel("Descrição")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
 
-let canais = message.guild.channels.cache
-.filter(c=>c.type===ChannelType.GuildText)
-.map(c=>{
-return {
-label:c.name.length<5?c.name+"....":c.name,
-value:c.id,
-description:"Selecionar canal"
-}})
+    const foto = new TextInputBuilder()
+      .setCustomId("foto")
+      .setLabel("URL da Foto")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
 
-const menu = new StringSelectMenuBuilder()
-.setCustomId("canal_enviar")
-.setPlaceholder("Pesquisar canal")
-.addOptions(canais.slice(0,25))
+    const preco = new TextInputBuilder()
+      .setCustomId("preco")
+      .setLabel("Preço")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-const row = new ActionRowBuilder().addComponents(menu)
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titulo),
+      new ActionRowBuilder().addComponents(descricao),
+      new ActionRowBuilder().addComponents(foto),
+      new ActionRowBuilder().addComponents(preco)
+    );
 
-await message.channel.send({content:"Selecione canal:",components:[row]})
+    await interaction.showModal(modal);
+  }
 
-const collector = message.channel.createMessageComponentCollector({time:60000})
+  if (interaction.isModalSubmit() && interaction.customId === "modal_produto") {
 
-collector.on("collect", async(i)=>{
+    const produtos = carregarProdutos();
 
-if(i.customId==="canal_enviar"){
+    const novo = {
+      id: Date.now().toString(),
+      titulo: interaction.fields.getTextInputValue("titulo"),
+      descricao: interaction.fields.getTextInputValue("descricao"),
+      foto: interaction.fields.getTextInputValue("foto"),
+      preco: interaction.fields.getTextInputValue("preco"),
+    };
 
-let canal = message.guild.channels.cache.get(i.values[0])
+    produtos.push(novo);
+    salvarProdutos(produtos);
 
-produtos.forEach(async(p)=>{
+    interaction.reply({ content: "✅ Produto salvo!", ephemeral: true });
+  }
 
-const embed = new EmbedBuilder()
-.setTitle(p.nome)
-.setDescription(p.descricao)
-.setImage(p.imagem)
-.addFields({name:"Preço",value:p.preco},{name:"Estoque",value:p.estoque})
+  // POSTAR PRODUTO
+  if (interaction.isStringSelectMenu() && interaction.customId === "selecionar_produto_postar") {
 
-const menu = new StringSelectMenuBuilder()
-.setCustomId("comprar_"+p.id)
-.setPlaceholder("Comprar")
-.setMinValues(1)
-.setMaxValues(1)
-.addOptions([{
-label:p.nome.length<5?p.nome+"....":p.nome,
-description:p.descricao.length<5?p.descricao+"....":p.descricao,
-value:"produto_"+p.id
-}])
+    const produtos = carregarProdutos();
+    const produto = produtos.find(p => p.id === interaction.values[0]);
 
-const row = new ActionRowBuilder().addComponents(menu)
+    const embed = new EmbedBuilder()
+      .setTitle(produto.titulo)
+      .setDescription(produto.descricao)
+      .addFields({ name: "💰 Preço", value: `R$ ${produto.preco}` });
 
-canal.send({embeds:[embed],components:[row]})
-})
+    if (produto.foto) embed.setImage(produto.foto);
 
-await i.reply({content:"✅ Produtos enviados",ephemeral:true})
-collector.stop()
-}
-})
-}
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`comprar_${produto.id}`)
+      .setPlaceholder("Deseja comprar?")
+      .addOptions({
+        label: "Comprar Produto",
+        value: produto.id
+      });
 
-})
+    const row = new ActionRowBuilder().addComponents(menu);
 
-client.on("interactionCreate", async(interaction)=>{
+    interaction.reply({ embeds: [embed], components: [row] });
+  }
 
-if(!interaction.isStringSelectMenu()) return
+  // CLIENTE ESCOLHE PRODUTO
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("comprar_")) {
 
-if(interaction.customId.startsWith("comprar_")){
+    const produtoId = interaction.values[0];
 
-let produto = produtos.find(p=>"produto_"+p.id===interaction.values[0])
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ticket_${produtoId}`)
+        .setLabel("🎫 Ir para o Ticket")
+        .setStyle(ButtonStyle.Success)
+    );
 
-let canal = await interaction.guild.channels.create({
-name:"ticket-"+interaction.user.username,
-type:ChannelType.GuildText,
-permissionOverwrites:[
-{ id:interaction.guild.id,deny:[PermissionsBitField.Flags.ViewChannel]},
-{ id:interaction.user.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages]},
-{ id:process.env.STAFF_ROLE_ID,allow:[PermissionsBitField.Flags.ViewChannel]}
-]})
+    interaction.reply({
+      content: "Clique abaixo para abrir seu ticket.",
+      components: [row],
+      ephemeral: true,
+    });
+  }
 
-const btn = new ButtonBuilder()
-.setCustomId("fechar")
-.setLabel("Fechar Ticket")
-.setStyle(ButtonStyle.Danger)
+  // CRIAR TICKET
+  if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
 
-const row = new ActionRowBuilder().addComponents(btn)
+    const produtoId = interaction.customId.split("_")[1];
+    const produtos = carregarProdutos();
+    const produto = produtos.find(p => p.id === produtoId);
 
-canal.send({content:`${interaction.user}`,components:[row]})
+    const numero = gerarNumeroTicket();
 
-interaction.reply({content:`Ticket criado: ${canal}`,ephemeral:true})
-}
+    const canal = await interaction.guild.channels.create({
+      name: `ticket-${numero}`,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel],
+        },
+        {
+          id: interaction.user.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+        },
+        {
+          id: STAFF_ROLE_ID,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+        },
+      ],
+    });
 
-if(interaction.customId==="fechar"){
+    const embed = new EmbedBuilder()
+      .setTitle(`🛒 Produto: ${produto.titulo}`)
+      .setDescription(produto.descricao)
+      .addFields({ name: "💰 Preço", value: `R$ ${produto.preco}` });
 
-if(!interaction.member.roles.cache.has(process.env.STAFF_ROLE_ID) &&
-interaction.user.id!==process.env.DONO_ID)
-return interaction.reply({content:"❌ Sem permissão",ephemeral:true})
+    if (produto.foto) embed.setImage(produto.foto);
 
-interaction.channel.delete()
-}
-})
+    const fechar = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("fechar_ticket")
+        .setLabel("🔒 Fechar Ticket")
+        .setStyle(ButtonStyle.Danger)
+    );
 
-client.login(process.env.TOKEN)
+    canal.send({
+      content: `Olá ${interaction.user}, aguarde um staff responder.`,
+      embeds: [embed],
+      components: [fechar],
+    });
+
+    interaction.reply({ content: `✅ Ticket criado: ${canal}`, ephemeral: true });
+  }
+
+  // FECHAR TICKET
+  if (interaction.isButton() && interaction.customId === "fechar_ticket") {
+
+    if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+      return interaction.reply({ content: "❌ Apenas staff pode fechar.", ephemeral: true });
+    }
+
+    interaction.reply("🔒 Fechando ticket...");
+    setTimeout(() => {
+      interaction.channel.delete();
+    }, 3000);
+  }
+
+});
+
+client.login(process.env.TOKEN);
