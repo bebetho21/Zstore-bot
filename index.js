@@ -9,8 +9,12 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder,
   PermissionsBitField,
-  ChannelType
+  ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 const client = new Client({
@@ -23,97 +27,184 @@ const client = new Client({
 
 const PREFIX = "!";
 const PRODUTOS_PATH = "./produtos.json";
+const CONFIG_PATH = "./config.json";
 
-function carregarProdutos() {
-  if (!fs.existsSync(PRODUTOS_PATH)) {
-    fs.writeFileSync(PRODUTOS_PATH, JSON.stringify({}));
+let criacoes = {};
+
+function loadJSON(path, defaultData = {}) {
+  if (!fs.existsSync(path)) {
+    fs.writeFileSync(path, JSON.stringify(defaultData, null, 2));
   }
-  return JSON.parse(fs.readFileSync(PRODUTOS_PATH));
+  return JSON.parse(fs.readFileSync(path));
 }
 
-function salvarProdutos(produtos) {
-  fs.writeFileSync(PRODUTOS_PATH, JSON.stringify(produtos, null, 2));
+function saveJSON(path, data) {
+  fs.writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
 client.once("ready", () => {
-  console.log(`🔥 ZStore Online como ${client.user.tag}`);
+  console.log(`🔥 Loja PRO Online como ${client.user.tag}`);
 });
 
 client.on("messageCreate", async (message) => {
   if (!message.content.startsWith(PREFIX) || message.author.bot) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const comando = args.shift().toLowerCase();
-  const produtos = carregarProdutos();
+  const cmd = args.shift().toLowerCase();
 
-  // 🔐 Apenas admin
-  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return message.reply("❌ Apenas administradores podem usar comandos.");
+  const produtos = loadJSON(PRODUTOS_PATH);
+  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null, cupons: {} });
+
+  if (cmd === "comandos") {
+    return message.reply(`
+📦 **COMANDOS DO BOT**
+
+!criarproduto  
+!listarprodutos  
+!editarproduto ID  
+!deletarproduto ID  
+!addestoque ID quantidade  
+!criarcupom NOME porcentagem  
+!setstaff @cargo  
+!setlogs #canal  
+!comandos
+    `);
   }
 
-  // 📦 CRIAR PRODUTO
-  if (comando === "criarproduto") {
-    const id = args[0];
-    if (!id) return message.reply("Informe um ID.");
+  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+    return message.reply("❌ Apenas administradores.");
 
-    if (produtos[id]) return message.reply("Produto já existe.");
-
-    produtos[id] = {
-      nome: "Novo Produto",
-      descricao: "Descrição aqui",
-      imagem: null,
-      opcoes: []
-    };
-
-    salvarProdutos(produtos);
-    return message.reply(`✅ Produto ${id} criado.`);
+  if (cmd === "setstaff") {
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply("Marque um cargo.");
+    config.staffRole = role.id;
+    saveJSON(CONFIG_PATH, config);
+    return message.reply("✅ Cargo staff definido.");
   }
 
-  // ➕ ADD OPÇÃO
-  if (comando === "addopcao") {
-    const id = args[0];
-    const label = args[1];
-    const duracao = args[2];
-    const preco = args[3];
+  if (cmd === "setlogs") {
+    const canal = message.mentions.channels.first();
+    if (!canal) return message.reply("Marque um canal.");
+    config.logsChannel = canal.id;
+    saveJSON(CONFIG_PATH, config);
+    return message.reply("✅ Canal de logs definido.");
+  }
 
+  if (cmd === "criarcupom") {
+    const nome = args[0];
+    const desconto = parseInt(args[1]);
+    if (!nome || !desconto) return message.reply("Use: !criarcupom NOME 10");
+    config.cupons[nome] = desconto;
+    saveJSON(CONFIG_PATH, config);
+    return message.reply("✅ Cupom criado.");
+  }
+
+  if (cmd === "listarprodutos") {
+    const lista = Object.keys(produtos);
+    if (!lista.length) return message.reply("Nenhum produto.");
+    return message.reply("📦 Produtos:\n" + lista.join("\n"));
+  }
+
+  if (cmd === "deletarproduto") {
+    const id = args[0];
     if (!produtos[id]) return message.reply("Produto não existe.");
-
-    produtos[id].opcoes.push({
-      label: label.replace(/_/g, " "),
-      descricao: duracao.replace(/_/g, " "),
-      preco: preco,
-      value: label.toLowerCase()
-    });
-
-    salvarProdutos(produtos);
-    return message.reply("✅ Opção adicionada.");
-  }
-
-  // 🗑️ DELETAR PRODUTO
-  if (comando === "deletarproduto") {
-    const id = args[0];
-    if (!produtos[id]) return message.reply("Produto não existe.");
-
     delete produtos[id];
-    salvarProdutos(produtos);
+    saveJSON(PRODUTOS_PATH, produtos);
     return message.reply("🗑️ Produto deletado.");
   }
 
-  // 📤 ENVIAR PRODUTO
-  if (comando === "enviarproduto") {
+  if (cmd === "addestoque") {
     const id = args[0];
+    const qtd = parseInt(args[1]);
     if (!produtos[id]) return message.reply("Produto não existe.");
+    produtos[id].estoque = (produtos[id].estoque || 0) + qtd;
+    saveJSON(PRODUTOS_PATH, produtos);
+    return message.reply("📦 Estoque atualizado.");
+  }
 
-    const produto = produtos[id];
+  if (cmd === "criarproduto") {
+
+    criacoes[message.author.id] = {
+      nome: null,
+      descricao: null,
+      imagem: null,
+      opcoes: [],
+      estoque: 0
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle("📦 Criar Produto")
+      .setDescription("Configure usando os botões.")
+      .setColor("#2B2D31");
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("set_nome").setLabel("Nome").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("set_desc").setLabel("Descrição").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("set_img").setLabel("Imagem").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("add_opcao").setLabel("Adicionar Opção").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("publicar_produto").setLabel("Publicar").setStyle(ButtonStyle.Danger)
+    );
+
+    return message.reply({ embeds: [embed], components: [row] });
+  }
+});
+
+client.on("interactionCreate", async (interaction) => {
+
+  const produtos = loadJSON(PRODUTOS_PATH);
+  const config = loadJSON(CONFIG_PATH, { staffRole: null, logsChannel: null, cupons: {} });
+
+  if (interaction.isButton()) {
+
+    const userId = interaction.user.id;
+
+    if (interaction.customId === "publicar_produto") {
+
+      const select = new ChannelSelectMenuBuilder()
+        .setCustomId("select_canal")
+        .setPlaceholder("Escolha o canal")
+        .addChannelTypes(ChannelType.GuildText);
+
+      return interaction.reply({
+        content: "Selecione o canal:",
+        components: [new ActionRowBuilder().addComponents(select)],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId === "fechar_ticket") {
+
+      const staff = config.staffRole;
+      if (
+        interaction.member.roles.cache.has(staff) ||
+        interaction.user.id === interaction.channel.topic
+      ) {
+        await interaction.reply("🔒 Fechando...");
+        setTimeout(() => interaction.channel.delete(), 3000);
+      } else {
+        interaction.reply({ content: "❌ Apenas staff.", ephemeral: true });
+      }
+    }
+  }
+
+  if (interaction.isChannelSelectMenu()) {
+
+    const canal = interaction.channels.first();
+    const userId = interaction.user.id;
+    const produto = criacoes[userId];
+
+    const id = "produto_" + Date.now();
+    produtos[id] = produto;
+    saveJSON(PRODUTOS_PATH, produtos);
 
     const embed = new EmbedBuilder()
       .setTitle(produto.nome)
       .setDescription(produto.descricao)
-      .setColor("#2B2D31")
-      .setImage(produto.imagem);
+      .setImage(produto.imagem)
+      .setColor("#2B2D31");
 
     const select = new StringSelectMenuBuilder()
-      .setCustomId(`select_${id}`)
+      .setCustomId("buy_" + id)
       .setPlaceholder("🛒 Escolha o plano");
 
     produto.opcoes.forEach(op => {
@@ -124,90 +215,56 @@ client.on("messageCreate", async (message) => {
       });
     });
 
-    const row = new ActionRowBuilder().addComponents(select);
-
-    return message.channel.send({
+    canal.send({
       embeds: [embed],
-      components: [row]
+      components: [new ActionRowBuilder().addComponents(select)]
     });
+
+    delete criacoes[userId];
+
+    return interaction.reply({ content: "✅ Produto publicado!", ephemeral: true });
   }
-});
 
-client.on("interactionCreate", async (interaction) => {
-
-  // 📌 SELECT MENU
   if (interaction.isStringSelectMenu()) {
-    const produtoId = interaction.customId.split("_")[1];
-    const produtos = carregarProdutos();
-    const produto = produtos[produtoId];
 
-    const opcao = produto.opcoes.find(
-      op => op.value === interaction.values[0]
-    );
+    if (interaction.customId.startsWith("buy_")) {
 
-    const botao = new ButtonBuilder()
-      .setCustomId(`comprar_${produtoId}_${opcao.value}`)
-      .setLabel("🛒 Comprar")
-      .setStyle(ButtonStyle.Success);
+      const id = interaction.customId.split("_")[1];
+      const produto = produtos[id];
 
-    const row = new ActionRowBuilder().addComponents(botao);
-
-    return interaction.reply({
-      content: `Plano: **${opcao.label}**\nPreço: **${opcao.preco}**`,
-      components: [row],
-      ephemeral: true
-    });
-  }
-
-  // 🛒 BOTÃO COMPRAR
-  if (interaction.isButton()) {
-
-    if (interaction.customId.startsWith("comprar_")) {
-
-      const partes = interaction.customId.split("_");
-      const produtoId = partes[1];
-      const opcaoValue = partes[2];
-
-      const produtos = carregarProdutos();
-      const produto = produtos[produtoId];
-      const opcao = produto.opcoes.find(o => o.value === opcaoValue);
+      if (!produto.estoque || produto.estoque <= 0)
+        return interaction.reply({ content: "❌ Produto sem estoque.", ephemeral: true });
 
       const canal = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.username}`,
+        name: "ticket-" + interaction.user.username,
         type: ChannelType.GuildText,
+        topic: interaction.user.id,
         permissionOverwrites: [
-          {
-            id: interaction.guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id: interaction.user.id,
-            allow: [PermissionsBitField.Flags.ViewChannel]
-          }
+          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] }
         ]
       });
 
       const fechar = new ButtonBuilder()
         .setCustomId("fechar_ticket")
-        .setLabel("🔒 Fechar Ticket")
+        .setLabel("🔒 Fechar")
         .setStyle(ButtonStyle.Danger);
 
-      const row = new ActionRowBuilder().addComponents(fechar);
-
       canal.send({
-        content: `🎟️ ${interaction.user}\nProduto: **${produto.nome}**\nPlano: **${opcao.label}**\nPreço: **${opcao.preco}**`,
-        components: [row]
+        content: `🎟️ ${interaction.user}`,
+        components: [new ActionRowBuilder().addComponents(fechar)]
       });
 
-      return interaction.reply({
-        content: `✅ Ticket criado: ${canal}`,
-        ephemeral: true
-      });
-    }
+      produto.estoque -= 1;
+      saveJSON(PRODUTOS_PATH, produtos);
 
-    if (interaction.customId === "fechar_ticket") {
-      await interaction.reply("🔒 Fechando ticket...");
-      setTimeout(() => interaction.channel.delete(), 3000);
+      if (config.logsChannel) {
+        const logChannel = interaction.guild.channels.cache.get(config.logsChannel);
+        if (logChannel)
+          logChannel.send(`🛒 Compra: ${interaction.user.tag} comprou ${produto.nome}`);
+      }
+
+      return interaction.reply({ content: `✅ Ticket criado: ${canal}`, ephemeral: true });
     }
   }
 });
