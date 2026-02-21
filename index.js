@@ -25,16 +25,27 @@ const client = new Client({
   ],
 });
 
-const STAFF_ROLE_ID = "1464846409139359784";
+// ================= CONFIG =================
+const STAFF_ROLE_ID = "COLOQUE_AQUI_ID_DO_CARGO_STAFF";
 const produtosPath = "./produtos.json";
-const ticketCounterPath = "./tickets.json";
+const ticketsPath = "./tickets.json";
 
-if (!fs.existsSync(ticketCounterPath)) {
-  fs.writeFileSync(ticketCounterPath, JSON.stringify({ count: 0 }));
+// ================= CRIAR ARQUIVOS AUTOMÁTICOS =================
+if (!fs.existsSync(produtosPath)) {
+  fs.writeFileSync(produtosPath, JSON.stringify([], null, 2));
 }
 
+if (!fs.existsSync(ticketsPath)) {
+  fs.writeFileSync(ticketsPath, JSON.stringify({ count: 0 }, null, 2));
+}
+
+// ================= FUNÇÕES =================
 function carregarProdutos() {
-  return JSON.parse(fs.readFileSync(produtosPath));
+  try {
+    return JSON.parse(fs.readFileSync(produtosPath));
+  } catch {
+    return [];
+  }
 }
 
 function salvarProdutos(produtos) {
@@ -42,25 +53,25 @@ function salvarProdutos(produtos) {
 }
 
 function gerarNumeroTicket() {
-  const data = JSON.parse(fs.readFileSync(ticketCounterPath));
+  const data = JSON.parse(fs.readFileSync(ticketsPath));
   data.count++;
-  fs.writeFileSync(ticketCounterPath, JSON.stringify(data, null, 2));
+  fs.writeFileSync(ticketsPath, JSON.stringify(data, null, 2));
   return data.count.toString().padStart(3, "0");
 }
 
-client.on("ready", () => {
+// ================= BOT ONLINE =================
+client.on("clientReady", () => {
   console.log(`✅ Bot online como ${client.user.tag}`);
 });
 
-
-// ========================
-// CRIAR NOVO PRODUTO
-// ========================
+// ================= COMANDOS =================
 client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
   if (message.content === "!novoproduto") {
     const embed = new EmbedBuilder()
       .setTitle("🛠 Criar Novo Produto")
-      .setDescription("Clique abaixo para configurar o produto.");
+      .setDescription("Clique no botão abaixo para criar um novo produto.");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -90,6 +101,7 @@ client.on("messageCreate", async (message) => {
     });
 
     const row = new ActionRowBuilder().addComponents(menu);
+
     message.channel.send({
       content: "📦 Escolha um produto para postar:",
       components: [row],
@@ -97,13 +109,10 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-
-// ========================
-// INTERAÇÕES
-// ========================
+// ================= INTERAÇÕES =================
 client.on(Events.InteractionCreate, async (interaction) => {
 
-  // Modal criação produto
+  // ABRIR MODAL CRIAÇÃO PRODUTO
   if (interaction.isButton() && interaction.customId === "criar_produto") {
 
     const modal = new ModalBuilder()
@@ -144,6 +153,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.showModal(modal);
   }
 
+  // SALVAR PRODUTO
   if (interaction.isModalSubmit() && interaction.customId === "modal_produto") {
 
     const produtos = carregarProdutos();
@@ -159,7 +169,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     produtos.push(novo);
     salvarProdutos(produtos);
 
-    interaction.reply({ content: "✅ Produto salvo!", ephemeral: true });
+    interaction.reply({ content: "✅ Produto salvo com sucesso!", ephemeral: true });
   }
 
   // POSTAR PRODUTO
@@ -167,6 +177,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const produtos = carregarProdutos();
     const produto = produtos.find(p => p.id === interaction.values[0]);
+
+    if (!produto) return interaction.reply({ content: "❌ Produto não encontrado.", ephemeral: true });
 
     const embed = new EmbedBuilder()
       .setTitle(produto.titulo)
@@ -177,10 +189,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`comprar_${produto.id}`)
-      .setPlaceholder("Deseja comprar?")
+      .setPlaceholder("Comprar produto")
       .addOptions({
-        label: "Comprar Produto",
-        value: produto.id
+        label: "Comprar",
+        value: produto.id,
       });
 
     const row = new ActionRowBuilder().addComponents(menu);
@@ -188,7 +200,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  // CLIENTE ESCOLHE PRODUTO
+  // CLIENTE ESCOLHE COMPRAR
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith("comprar_")) {
 
     const produtoId = interaction.values[0];
@@ -201,7 +213,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     );
 
     interaction.reply({
-      content: "Clique abaixo para abrir seu ticket.",
+      content: "Clique abaixo para abrir seu ticket:",
       components: [row],
       ephemeral: true,
     });
@@ -213,6 +225,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const produtoId = interaction.customId.split("_")[1];
     const produtos = carregarProdutos();
     const produto = produtos.find(p => p.id === produtoId);
+
+    if (!produto) return interaction.reply({ content: "❌ Produto não encontrado.", ephemeral: true });
 
     const numero = gerarNumeroTicket();
 
@@ -226,11 +240,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         },
         {
           id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+          ],
         },
         {
           id: STAFF_ROLE_ID,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+          ],
         },
       ],
     });
@@ -262,12 +282,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isButton() && interaction.customId === "fechar_ticket") {
 
     if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
-      return interaction.reply({ content: "❌ Apenas staff pode fechar.", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Apenas staff pode fechar o ticket.",
+        ephemeral: true,
+      });
     }
 
-    interaction.reply("🔒 Fechando ticket...");
+    await interaction.reply("🔒 Fechando ticket em 3 segundos...");
     setTimeout(() => {
-      interaction.channel.delete();
+      interaction.channel.delete().catch(() => {});
     }, 3000);
   }
 
