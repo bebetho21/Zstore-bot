@@ -26,6 +26,43 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
+async function enviarPainelTicket(channel, user, categoria, ticketID, assunto) {
+
+  const embed = new EmbedBuilder()
+    .setColor('#2b2d31')
+    .setTitle('📁 Atendimento Cidade Alta Roleplay - PS5 💛')
+    .setDescription(`Olá ${user}, Seja bem-vindo(a) ao ticket...`)
+    .addFields(
+      { name: '📂 Categoria Escolhida:', value: `\`${categoria}\`` },
+      { name: '🌐 ID do Ticket:', value: `\`${ticketID}\`` },
+      { name: '📝 Assunto do Ticket:', value: `\`${assunto}\`` }
+    )
+    .setThumbnail('LINK_DA_IMAGEM_AQUI');
+
+  const botoes = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('assumir_ticket')
+        .setLabel('⭐ Assumir Ticket')
+        .setStyle(ButtonStyle.Primary),
+
+      new ButtonBuilder()
+        .setCustomId('painel_admin')
+        .setLabel('🛡 Painel Admin')
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId('fechar_ticket')
+        .setLabel('🗑 Fechar Ticket')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+  await channel.send({
+    embeds: [embed],
+    components: [botoes]
+  });
+}
+
 const PREFIX = "!";
 const STAFF_ROLE_ID = "1473874493712892046";
 const LOG_CHANNEL_ID = "1475202362338709727";
@@ -73,7 +110,8 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(config.titulo)
       .setDescription(config.descricao)
-      .setColor("Gold");
+      .setColor("Gray");
+      .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg?ex=699ca5fd&is=699b547d&hm=3d12848b2185be27d5a3e0afa4f29fea4f8810961c804a8fbc4b251f3595a508')
 
     if (config.imagem) embed.setImage(config.imagem);
 
@@ -174,16 +212,31 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    const embed = new EmbedBuilder()
-      .setTitle("Ticket - Alta Group")
-      .setColor("Gold")
-      .setDescription(`
-Categoria: ${categoria}
-ID: ${ticketId}
-Assunto: ${assunto}
+const embed = new EmbedBuilder()
+  .setColor('#2b2d31')
+  .setTitle('📁 Atendimento Alta Group Roleplay - PS5 💛')
+  .setDescription(
+`Olá ${interaction.user}, Seja bem-vindo(a) ao ticket.
+Aqui você poderá falar diretamente com a nossa equipe. Todos os responsáveis já estão cientes da abertura do ticket e foram devidamente notificados. Em breve, um atendente irá esclarecer suas dúvidas.
 
-Aguarde um membro da equipe responder.
-      `);
+Pedimos, por gentileza, que evite enviar mensagens privadas (DMs) aos atendentes. Basta aguardar por aqui e, assim que possível, você será atendido.
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠ Aguarde um membro da equipe responder.
+
+Atenciosamente,
+Equipe Alta Group Roleplay - PS5 💛`
+  )
+  .addFields(
+    { name: '📂 Categoria Escolhida:', value: `\`${categoria}\`` },
+    { name: '🌐 ID do Ticket:', value: `\`${ticketId}\`` },
+    { name: '📝 Assunto do Ticket:', value: `\`${assunto}\`` }
+  )
+  .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg?ex=699ca5fd&is=699b547d&hm=3d12848b2185be27d5a3e0afa4f29fea4f8810961c804a8fbc4b251f3595a508');
+
+await channel.send({ embeds: [embed] });
+    
+  `);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
