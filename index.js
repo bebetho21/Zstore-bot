@@ -14,7 +14,7 @@ const {
 } = require('discord.js');
 
 // Configurações principais
-const STAFF_ROLE_ID = "1464846409139359784"; // Substitua pelo ID real
+const STAFF_ROLE_ID = "1464846406450942065"; // Substitua pelo ID real
 const CLIENT_ROLE_ID = "1464846418538926299"; // Substitua pelo ID real
 const FEEDBACK_CHANNEL_ID = "1464846455218114683"; // Substitua pelo ID real
 const PREFIX = "!";
@@ -106,8 +106,10 @@ client.on('messageCreate', async (message) => {
 
     // !clear
     if (command === 'clear') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-            return message.reply("Você não tem permissão para usar este comando.");
+        const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID);
+        const isOwner = message.guild.ownerId === message.author.id;
+        if (!isStaff && !isOwner) {
+            return message.reply("Apenas STAFF ou o Dono podem usar este comando.");
         }
         const amount = parseInt(args[0]);
         if (isNaN(amount) || amount < 1 || amount > 100) return message.reply("Envie um número entre 1 e 100.");
@@ -134,7 +136,10 @@ client.on('messageCreate', async (message) => {
 
     // !cliente
     if (command === 'cliente') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
+        const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID);
+        const isOwner = message.guild.ownerId === message.author.id;
+        if (!isStaff && !isOwner) return message.reply("Apenas STAFF ou o Dono.");
+        
         const target = message.mentions.members.first();
         if (!target) return message.reply("Mencione um usuário.");
         
@@ -147,6 +152,10 @@ client.on('messageCreate', async (message) => {
 
     // !criarproduto
     if (command === 'criarproduto') {
+        const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID);
+        const isOwner = message.guild.ownerId === message.author.id;
+        if (!isStaff && !isOwner) return message.reply("Apenas STAFF ou o Dono.");
+
         const filter = m => m.author.id === message.author.id;
         try {
             await message.reply("Qual o nome do produto?");
@@ -199,7 +208,10 @@ client.on('messageCreate', async (message) => {
 
     // !enviarproduto
     if (command === 'enviarproduto') {
-        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return message.reply("Apenas STAFF.");
+        const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID);
+        const isOwner = message.guild.ownerId === message.author.id;
+        if (!isStaff && !isOwner) return message.reply("Apenas STAFF ou o Dono.");
+
         if (!lastCreatedProduct) return message.reply("Crie um produto primeiro com `!criarproduto`.");
 
         const select = new ChannelSelectMenuBuilder()
@@ -281,8 +293,10 @@ client.on('interactionCreate', async (interaction) => {
 
         // Close Ticket
         if (interaction.customId === 'close_ticket') {
-            if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
-                return interaction.reply({ content: "Apenas STAFF pode fechar tickets.", ephemeral: true });
+            const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID);
+            const isOwner = interaction.guild.ownerId === interaction.user.id;
+            if (!isStaff && !isOwner) {
+                return interaction.reply({ content: "Apenas STAFF ou o Dono pode fechar tickets.", ephemeral: true });
             }
             await interaction.reply("O ticket será deletado em 5 segundos...");
             setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
