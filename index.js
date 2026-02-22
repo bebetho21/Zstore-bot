@@ -76,6 +76,7 @@ client.on("messageCreate", async (message) => {
       .setTitle(config.titulo)
       .setDescription(config.descricao)
       .setColor("Gold");
+      .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
 
     if (config.imagem) embed.setImage(config.imagem);
 
@@ -226,6 +227,8 @@ client.on("interactionCreate", async (interaction) => {
         { name: '📂 Categoria:', value: `\`${categoria}\`` },
         { name: '🌐 ID:', value: `\`${ticketId}\`` },
         { name: '📝 Assunto:', value: `\`${assunto}\`` }
+        )
+        .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
       );
 
     const row = new ActionRowBuilder().addComponents(
