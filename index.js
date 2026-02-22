@@ -110,7 +110,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(config.titulo)
       .setDescription(config.descricao)
-      .setColor("Gray");
+      .setColor("Gold")
       .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg?ex=699ca5fd&is=699b547d&hm=3d12848b2185be27d5a3e0afa4f29fea4f8810961c804a8fbc4b251f3595a508')
 
     if (config.imagem) embed.setImage(config.imagem);
@@ -180,63 +180,86 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.showModal(modal);
   }
 
-  // =============================
-  // MODAL ENVIADO
-  // =============================
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("modal_")) {
-    const categoria = interaction.customId.replace("modal_", "");
-    const assunto = interaction.fields.getTextInputValue("assunto");
+ // =============================
+// MODAL ENVIADO
+// =============================
+if (interaction.isModalSubmit() && interaction.customId.startsWith("modal_")) {
+  const categoria = interaction.customId.replace("modal_", "");
+  const assunto = interaction.fields.getTextInputValue("assunto");
 
-    config.ticketCount++;
-    saveConfig();
+  config.ticketCount++;
+  saveConfig();
 
-    const ticketId = config.ticketCount;
-    openTickets.set(interaction.user.id, ticketId);
+  const ticketId = config.ticketCount;
+  openTickets.set(interaction.user.id, ticketId);
 
-    const channel = await interaction.guild.channels.create({
-      name: `ticket-${ticketId}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        },
-        {
-          id: STAFF_ROLE_ID,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        }
-      ]
-    });
+  const channel = await interaction.guild.channels.create({
+    name: `ticket-${ticketId}`,
+    type: ChannelType.GuildText,
+    permissionOverwrites: [
+      {
+        id: interaction.guild.roles.everyone,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      },
+      {
+        id: STAFF_ROLE_ID,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      }
+    ]
+  });
 
-const embed = new EmbedBuilder()
-  .setColor('#2b2d31')
-  .setTitle('📁 Atendimento Alta Group Roleplay - PS5 💛')
-  .setDescription(
-`Olá ${interaction.user}, Seja bem-vindo(a) ao ticket.
-Aqui você poderá falar diretamente com a nossa equipe. Todos os responsáveis já estão cientes da abertura do ticket e foram devidamente notificados. Em breve, um atendente irá esclarecer suas dúvidas.
+  const embed = new EmbedBuilder()
+    .setColor('#2b2d31')
+    .setTitle('📁 Atendimento Alta Group Roleplay - PS5 💛')
+    .setDescription(
+`Olá ${interaction.user}, seja bem-vindo(a) ao ticket.
 
-Pedimos, por gentileza, que evite enviar mensagens privadas (DMs) aos atendentes. Basta aguardar por aqui e, assim que possível, você será atendido.
-
-━━━━━━━━━━━━━━━━━━━━━━
 ⚠ Aguarde um membro da equipe responder.
 
 Atenciosamente,
-Equipe Alta Group Roleplay - PS5 💛`
-  )
-  .addFields(
-    { name: '📂 Categoria Escolhida:', value: `\`${categoria}\`` },
-    { name: '🌐 ID do Ticket:', value: `\`${ticketId}\`` },
-    { name: '📝 Assunto do Ticket:', value: `\`${assunto}\`` }
-  )
-  .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg?ex=699ca5fd&is=699b547d&hm=3d12848b2185be27d5a3e0afa4f29fea4f8810961c804a8fbc4b251f3595a508');
+Equipe Alta Group`
+    )
+    .addFields(
+      { name: '📂 Categoria:', value: `\`${categoria}\`` },
+      { name: '🌐 ID do Ticket:', value: `\`${ticketId}\`` },
+      { name: '📝 Assunto:', value: `\`${assunto}\`` }
+    )
+    .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
 
-await channel.send({ embeds: [embed] });
-    
-  `);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("assumir_ticket")
+      .setLabel("⭐ Assumir Ticket")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("fechar_ticket")
+      .setLabel("❌ Fechar Ticket")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await channel.send({ embeds: [embed], components: [row] });
+
+  const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+  if (logChannel) {
+    logChannel.send(`📁 Ticket ${ticketId} criado por ${interaction.user.tag}`);
+  }
+
+  await interaction.reply({
+    content: `✅ Ticket criado com sucesso: ${channel}`,
+    ephemeral: true
+  });
+}
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -319,19 +342,30 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
 
-  if (cmd === "editarpainel") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
+  if (cmd === "painel") {
+  const embed = new EmbedBuilder()
+    .setTitle(config.titulo)
+    .setDescription(config.descricao)
+    .setColor("Grey")
+    .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
 
-    const tipo = args.shift();
-    const texto = args.join(" ");
+  if (config.imagem) embed.setImage(config.imagem);
 
-    if (tipo === "titulo") config.titulo = texto;
-    if (tipo === "descricao") config.descricao = texto;
-    if (tipo === "imagem") config.imagem = texto;
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId("select_categoria")
+    .setPlaceholder("Selecione a categoria")
+    .addOptions(
+      config.categorias.map(cat => ({
+        label: cat.nome,
+        description: cat.descricao,
+        value: cat.nome
+      }))
+    );
 
-    saveConfig();
-    message.reply("Painel atualizado com sucesso.");
-  }
+  const row = new ActionRowBuilder().addComponents(menu);
+
+  message.channel.send({ embeds: [embed], components: [row] });
+    }
 
   if (cmd === "adicionarcategoria") {
     if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
