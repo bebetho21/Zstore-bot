@@ -75,8 +75,7 @@ client.on("messageCreate", async (message) => {
     const embed = new EmbedBuilder()
       .setTitle(config.titulo)
       .setDescription(config.descricao)
-      .setColor("Gold")
-      .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
+      .setColor("Gold");
 
     if (config.imagem) embed.setImage(config.imagem);
 
@@ -96,20 +95,21 @@ client.on("messageCreate", async (message) => {
     message.channel.send({ embeds: [embed], components: [row] });
   }
 
-  // HELP
-  if (cmd === "helpalta") {
-    const helpEmbed = new EmbedBuilder()
-      .setTitle("Comandos - Alta Group")
-      .setColor("Blue")
-      .setDescription(`
-!painel - Enviar painel
-!adicionarcategoria <nome> <descrição>
-!removercategoria <nome>
-!editarcategoria <nome> <nova descrição>
-!helpalta - Ver comandos
-      `);
+  // EDITAR PAINEL
+  if (cmd === "editarpainel") {
+    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
 
-    message.channel.send({ embeds: [helpEmbed] });
+    const tipo = args.shift();
+    const texto = args.join(" ");
+
+    if (!tipo) return message.reply("Use: !editarpainel titulo/descricao/imagem <texto>");
+
+    if (tipo === "titulo") config.titulo = texto;
+    if (tipo === "descricao") config.descricao = texto;
+    if (tipo === "imagem") config.imagem = texto;
+
+    saveConfig();
+    message.reply("Painel atualizado com sucesso.");
   }
 
   if (cmd === "adicionarcategoria") {
@@ -144,6 +144,18 @@ client.on("messageCreate", async (message) => {
     saveConfig();
     message.reply("Categoria atualizada.");
   }
+
+  if (cmd === "helpalta") {
+    message.reply(`
+!painel
+!editarpainel titulo <texto>
+!editarpainel descricao <texto>
+!editarpainel imagem <url>
+!adicionarcategoria <nome> <descrição>
+!removercategoria <nome>
+!editarcategoria <nome> <nova descrição>
+    `);
+  }
 });
 
 
@@ -152,7 +164,7 @@ client.on("messageCreate", async (message) => {
 // =============================
 client.on("interactionCreate", async (interaction) => {
 
-  // SELECT MENU
+  // SELECT
   if (interaction.isStringSelectMenu() && interaction.customId === "select_categoria") {
 
     if (openTickets.has(interaction.user.id)) {
@@ -229,11 +241,6 @@ client.on("interactionCreate", async (interaction) => {
 
     await channel.send({ embeds: [embed], components: [row] });
 
-    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (logChannel) {
-      logChannel.send(`Ticket ${ticketId} criado por ${interaction.user.tag}`);
-    }
-
     await interaction.reply({
       content: `Ticket criado com sucesso: ${channel}`,
       ephemeral: true
@@ -247,20 +254,17 @@ client.on("interactionCreate", async (interaction) => {
     const isStaff = member.roles.cache.has(STAFF_ROLE_ID);
 
     if (interaction.customId === "assumir_ticket") {
-      if (!isStaff) {
-        return interaction.reply({ content: "Apenas a staff pode assumir tickets.", ephemeral: true });
-      }
+      if (!isStaff)
+        return interaction.reply({ content: "Apenas a staff pode assumir.", ephemeral: true });
 
       await interaction.reply(`Ticket assumido por ${interaction.user}`);
     }
 
     if (interaction.customId === "fechar_ticket") {
-      if (!isStaff) {
-        return interaction.reply({ content: "Apenas a staff pode fechar tickets.", ephemeral: true });
-      }
+      if (!isStaff)
+        return interaction.reply({ content: "Apenas a staff pode fechar.", ephemeral: true });
 
-      await interaction.reply("Ticket será fechado em 5 segundos...");
-
+      await interaction.reply("Fechando em 5 segundos...");
       setTimeout(() => {
         interaction.channel.delete().catch(() => {});
       }, 5000);
