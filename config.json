@@ -1,10 +1,5 @@
 {
-  "prefix": "!",
-  "painel": {
-    "titulo": "Atendimento Alta Group",
-    "descricao": "Selecione uma opção abaixo para abrir um ticket.",
-    "thumbnail": ""
-  },
-  "categoriaTickets": "",
-  "cargoAtendente": ""
+  "titulo": "...",
+  "descricao": "...",
+  "categorias": ...
 }

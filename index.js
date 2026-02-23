@@ -46,7 +46,21 @@ let config = {
 };
 
 if (fs.existsSync(configPath)) {
-  config = JSON.parse(fs.readFileSync(configPath));
+  const fileData = JSON.parse(fs.readFileSync(configPath));
+
+  config = {
+    titulo: fileData.titulo || "Atendimento Alta Group - PS5",
+    descricao: fileData.descricao || "Selecione a categoria para abrir um ticket.",
+    imagem: fileData.imagem || "",
+    categorias: fileData.categorias || [
+      { nome: "Suporte", descricao: "Dúvidas e problemas." },
+      { nome: "Doações", descricao: "Informações sobre doações." },
+      { nome: "Denúncias", descricao: "Denuncie irregularidades." },
+      { nome: "Denúncias Staff", descricao: "Denuncie membros da staff." },
+      { nome: "Revisão de Banimento", descricao: "Solicite revisão." }
+    ],
+    ticketCount: fileData.ticketCount || 0
+  };
 }
 
 function saveConfig() {
@@ -55,7 +69,7 @@ function saveConfig() {
 
 const openTickets = new Map();
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`Bot online como ${client.user.tag}`);
 });
 client.on("messageCreate", async (message) => {
@@ -310,3 +324,5 @@ client.on("messageCreate", async (message) => {
   }
 });
 client.login(process.env.TOKEN);
+client.on("error", console.error);
+process.on("unhandledRejection", console.error);
