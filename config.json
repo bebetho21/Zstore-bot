@@ -1,5 +1,13 @@
 {
-  "titulo": "...",
-  "descricao": "...",
-  "categorias": ...
+  "titulo": "Atendimento Alta Group - PS5",
+  "descricao": "Selecione a categoria para abrir um ticket.",
+  "imagem": "",
+  "categorias": [
+    { "nome": "Suporte", "descricao": "Dúvidas e problemas." },
+    { "nome": "Doações", "descricao": "Informações sobre doações." },
+    { "nome": "Denúncias", "descricao": "Denuncie irregularidades." },
+    { "nome": "Denúncias Staff", "descricao": "Denuncie membros da staff." },
+    { "nome": "Revisão de Banimento", "descricao": "Solicite revisão." }
+  ],
+  "ticketCount": 0
 }
