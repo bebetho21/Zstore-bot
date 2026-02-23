@@ -27,8 +27,8 @@ const client = new Client({
 });
 
 const PREFIX = "!";
-const STAFF_ROLE_ID = "COLOQUE_ID_STAFF";
-const LOG_CHANNEL_ID = "COLOQUE_ID_LOG";
+const STAFF_ROLE_ID = "1473874493712892046";
+const LOG_CHANNEL_ID = "1475202362338709727";
 
 const configPath = "./config.json";
 let config = {
