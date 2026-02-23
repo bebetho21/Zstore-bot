@@ -1,535 +1,215 @@
-require("dotenv").config();
-const fs = require("fs");
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ChannelType,
-  PermissionsBitField
-} = require("discord.js");
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Partials, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    StringSelectMenuBuilder, 
+    ChannelType,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    PermissionsBitField
+} = require('discord.js');
+const fs = require('fs');
+require('dotenv').config();
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-  ],
-  partials: [Partials.Channel]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
+    ],
+    partials: [Partials.Message, Partials.Channel]
 });
 
-const PREFIX = "!";
-const STAFF_ROLE_ID = "1473874493712892046";
-const LOG_CHANNEL_ID = "1475202362338709727";
-
-const configPath = "./config.json";
-let config = {
-  titulo: "Atendimento Alta Group - PS5",
-  descricao: "Selecione a categoria para abrir um ticket.",
-  thumbnail: "",
-  thumbnail: "",
-  categorias: [
-    { nome: "Suporte", descricao: "Dúvidas e problemas." },
-    { nome: "Doações", descricao: "Informações sobre doações." },
-    { nome: "Denúncias", descricao: "Denuncie irregularidades." },
-    { nome: "Denúncias Staff", descricao: "Denuncie membros da staff." },
-    { nome: "Revisão de Banimento", descricao: "Solicite revisão." }
-  ],
-  ticketCount: 0
-};
-
-if (fs.existsSync(configPath)) {
-  config = JSON.parse(fs.readFileSync(configPath));
-}
+const CONFIG_FILE = './config.json';
+let config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
 
 function saveConfig() {
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-const openTickets = new Map();
-
-client.once("ready", () => {
-  console.log(`Bot online como ${client.user.tag}`);
+client.on('ready', () => {
+    console.log(`🤖 Alta Group logado como ${client.user.tag}`);
 });
 
+client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.content.startsWith('!')) return;
 
-// =============================
-// COMANDOS
-// =============================
-client.on("messageCreate", async (message) => {
-  if (!message.guild || message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
 
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
+    if (command === 'suporte') {
+        const embed = new EmbedBuilder()
+            .setTitle(config.suporte.titulo)
+            .setDescription(config.suporte.descricao)
+            .setThumbnail(config.suporte.thumbnail)
+            .setColor('Yellow');
 
-  // PAINEL
-  if (cmd === "painel") {
-    const embed = new EmbedBuilder()
-      .setTitle(config.titulo)
-      .setDescription(config.descricao)
-      .setColor("Gold");
-      .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('ticket_select')
+            .setPlaceholder('Selecione o motivo do contato...')
+            .addOptions([
+                { label: '🛠️ Suporte', value: 'Suporte' },
+                { label: '💰 Doações', value: 'Doações' },
+                { label: '🚨 Denúncias', value: 'Denúncias' },
+                { label: '👮 Denúncias Staff', value: 'Denúncias Staff' },
+                { label: '🔄 Revisões de Banimento', value: 'Revisões' }
+            ]);
 
-    if (config.thumbnail) embed.setThumbnail(config.thumbnail);
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("select_categoria")
-      .setPlaceholder("Selecione a categoria")
-      .addOptions(
-        config.categorias.map(cat => ({
-          label: cat.nome,
-          description: cat.descricao,
-          value: cat.nome
-        }))
-      );
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({ embeds: [embed], components: [row] });
-  }
-
-  // EDITAR PAINEL
-  if (cmd === "editarpainel") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const tipo = args.shift();
-    const texto = args.join(" ");
-
-    if (!tipo) return message.reply("Use: !editarpainel titulo/descricao/thumbnail <texto>");
-
-    if (tipo === "titulo") config.titulo = texto;
-    if (tipo === "descricao") config.descricao = texto;
-    if (tipo === "thumbnail") config.thumbnail = texto;
-
-    saveConfig();
-    message.reply("Painel atualizado com sucesso.");
-  }
-
-  if (cmd === "adicionarcategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.shift();
-    const descricao = args.join(" ");
-    config.categorias.push({ nome, descricao });
-    saveConfig();
-    message.reply("Categoria adicionada.");
-  }
-
-  if (cmd === "removercategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.join(" ");
-    config.categorias = config.categorias.filter(c => c.nome !== nome);
-    saveConfig();
-    message.reply("Categoria removida.");
-  }
-
-  if (cmd === "editarcategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.shift();
-    const novaDesc = args.join(" ");
-
-    const cat = config.categorias.find(c => c.nome === nome);
-    if (!cat) return message.reply("Categoria não encontrada.");
-
-    cat.descricao = novaDesc;
-    saveConfig();
-    message.reply("Categoria atualizada.");
-  }
-
-  if (cmd === "helpalta") {
-    message.reply(`
-!painel
-!editarpainel titulo <texto>
-!editarpainel descricao <texto>
-!editarpainel thumbnail <url>
-!adicionarcategoria <nome> <descrição>
-!removercategoria <nome>
-!editarcategoria <nome> <nova descrição>
-    `);
-  }
-});
-
-
-// =============================
-// INTERAÇÕES
-// =============================
-client.on("interactionCreate", async (interaction) => {
-
-  // SELECT
-  if (interaction.isStringSelectMenu() && interaction.customId === "select_categoria") {
-
-    if (openTickets.has(interaction.user.id)) {
-      return interaction.reply({ content: "Você já possui um ticket aberto.", ephemeral: true });
+        const row = new ActionRowBuilder().addComponents(select);
+        await message.channel.send({ embeds: [embed], components: [row] });
     }
 
-    const categoria = interaction.values[0];
+    if (command === 'helpalta') {
+        const embed = new EmbedBuilder()
+            .setTitle('📖 Comandos Alta Group')
+            .setDescription('`!suporte` - Envia o painel de tickets\n`!editarpainel` - Edita título e descrição\n`!setthumbnail` - Altera a thumbnail\n`!setcategoria` - Define categoria dos tickets\n`!setcargoatendente` - Define cargo de suporte')
+            .setColor('Gold');
+        message.channel.send({ embeds: [embed] });
+    }
 
-    const modal = new ModalBuilder()
-      .setCustomId(`modal_${categoria}`)
-      .setTitle("Abrir Ticket");
-
-    const assuntoInput = new TextInputBuilder()
-      .setCustomId("assunto")
-      .setLabel("Assunto do Ticket")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(assuntoInput));
-    await interaction.showModal(modal);
-  }
-
-  // MODAL
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("modal_")) {
-
-    const categoria = interaction.customId.replace("modal_", "");
-    const assunto = interaction.fields.getTextInputValue("assunto");
-
-    config.ticketCount++;
-    saveConfig();
-
-    const ticketId = config.ticketCount;
-    openTickets.set(interaction.user.id, ticketId);
-
-    const channel = await interaction.guild.channels.create({
-      name: `ticket-${ticketId}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        },
-        {
-          id: STAFF_ROLE_ID,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+    if (command === 'editarpainel') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        const sub = args.shift();
+        if (sub === 'titulo') {
+            config.suporte.titulo = args.join(' ');
+            saveConfig();
+            message.reply('✅ Título atualizado!');
+        } else if (sub === 'desc') {
+            config.suporte.descricao = args.join(' ');
+            saveConfig();
+            message.reply('✅ Descrição atualizada!');
+        } else {
+            message.reply('Uso: `!editarpainel titulo <texto>` ou `!editarpainel desc <texto>`');
         }
-      ]
-    });
-
-    const embed = new EmbedBuilder()
-      .setColor('#2b2d31')
-      .setTitle('📁 Atendimento Alta Group Roleplay - PS5 💛')
-      .setDescription(`Olá ${interaction.user}\n\nAguarde um membro da equipe responder.`)
-      .addFields(
-        { name: '📂 Categoria:', value: `\`${categoria}\`` },
-        { name: '🌐 ID:', value: `\`${ticketId}\`` },
-        { name: '📝 Assunto:', value: `\`${assunto}\`` }
-        )
-        .setThumbnail('https://cdn.discordapp.com/attachments/1473874983662129224/1475207977777758269/WhatsApp_Image_2026-02-20_at_11.24.27.jpeg');
-      );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("assumir_ticket")
-        .setLabel("⭐ Assumir Ticket")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("fechar_ticket")
-        .setLabel("❌ Fechar Ticket")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await channel.send({ embeds: [embed], components: [row] });
-
-    await interaction.reply({
-      content: `Ticket criado com sucesso: ${channel}`,
-      ephemeral: true
-    });
-  }
-
-  // BOTÕES
-  if (interaction.isButton()) {
-
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    const isStaff = member.roles.cache.has(STAFF_ROLE_ID);
-
-    if (interaction.customId === "assumir_ticket") {
-      if (!isStaff)
-        return interaction.reply({ content: "Apenas a staff pode assumir.", ephemeral: true });
-
-      await interaction.reply(`Ticket assumido por ${interaction.user}`);
     }
 
-    if (interaction.customId === "fechar_ticket") {
-      if (!isStaff)
-        return interaction.reply({ content: "Apenas a staff pode fechar.", ephemeral: true });
-
-      await interaction.reply("Fechando em 5 segundos...");
-      setTimeout(() => {
-        interaction.channel.delete().catch(() => {});
-      }, 5000);
+    if (command === 'setthumbnail') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        const url = args[0];
+        if (!url || !url.startsWith('http')) return message.reply('❌ URL inválida!');
+        config.suporte.thumbnail = url;
+        saveConfig();
+        message.reply('✅ Thumbnail atualizada!');
     }
-  }
+
+    if (command === 'setcategoria') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        const id = args[0];
+        if (!id) return message.reply('❌ Forneça o ID da categoria!');
+        config.suporte.categoria_id = id;
+        saveConfig();
+        message.reply('✅ Categoria de tickets definida!');
+    }
+
+    if (command === 'setcargoatendente') {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        const role = message.mentions.roles.first() || { id: args[0] };
+        if (!role.id) return message.reply('❌ Mencione ou forneça o ID do cargo!');
+        config.suporte.cargo_atendente = role.id;
+        saveConfig();
+        message.reply('✅ Cargo de atendente definido!');
+    }
+});
+
+client.on('interactionCreate', async (interaction) => {
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'ticket_select') {
+            const modal = new ModalBuilder()
+                .setCustomId(`modal_ticket_${interaction.values[0]}`)
+                .setTitle(`Ticket: ${interaction.values[0]}`);
+
+            const subjectInput = new TextInputBuilder()
+                .setCustomId('ticket_subject')
+                .setLabel('Assunto do Ticket')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Descreva brevemente o motivo do contato...')
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(subjectInput));
+            await interaction.showModal(modal);
+        }
+    }
+
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith('modal_ticket_')) {
+            const categoria = interaction.customId.replace('modal_ticket_', '');
+            const assunto = interaction.fields.getTextInputValue('ticket_subject');
+            const guild = interaction.guild;
+            
+            config.ticket_count++;
+            saveConfig();
+            const ticketId = config.ticket_count.toString().padStart(4, '0');
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const channel = await guild.channels.create({
+                name: `ticket-${interaction.user.username}`,
+                type: ChannelType.GuildText,
+                parent: config.suporte.categoria_id,
+                permissionOverwrites: [
+                    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                    ...(config.suporte.cargo_atendente ? [{ id: config.suporte.cargo_atendente, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : [])
+                ]
+            });
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎫 Atendimento Alta Group - #${ticketId}`)
+                .setThumbnail(config.suporte.thumbnail)
+                .setColor('Yellow')
+                .addFields(
+                    { name: '👤 Cliente', value: `${interaction.user}`, inline: true },
+                    { name: '📂 Categoria', value: categoria, inline: true },
+                    { name: '🆔 ID do Ticket', value: ticketId, inline: true },
+                    { name: '📝 Assunto', value: assunto },
+                    { name: '⚠️ Aviso', value: 'Por favor, não chame a Staff no privado. Aguarde ser atendido aqui.' }
+                );
+
+            const buttons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('assume_ticket').setLabel('Assumir Ticket').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('admin_panel').setLabel('Painel Admin').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('close_ticket').setLabel('Fechar Ticket').setEmoji('❌').setStyle(ButtonStyle.Danger)
+            );
+
+            await channel.send({ content: `${interaction.user} ${config.suporte.cargo_atendente ? `<@&${config.suporte.cargo_atendente}>` : ''}`, embeds: [embed], components: [buttons] });
+            await interaction.editReply(`✅ Seu ticket foi criado em ${channel}`);
+        }
+    }
+
+    if (interaction.isButton()) {
+        if (interaction.customId === 'close_ticket') {
+            if (config.suporte.cargo_atendente && !interaction.member.roles.cache.has(config.suporte.cargo_atendente)) {
+                return interaction.reply({ content: '❌ Apenas a Staff pode fechar este ticket.', ephemeral: true });
+            }
+            await interaction.reply('🔒 Este ticket será fechado em 5 segundos...');
+            setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+        }
+
+        if (interaction.customId === 'assume_ticket') {
+            if (config.suporte.cargo_atendente && !interaction.member.roles.cache.has(config.suporte.cargo_atendente)) {
+                return interaction.reply({ content: '❌ Apenas a Staff pode assumir tickets.', ephemeral: true });
+            }
+            await interaction.reply({ content: `✅ Ticket assumido por ${interaction.user}!` });
+            interaction.message.edit({ components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('assume_ticket').setLabel(`Assumido por ${interaction.user.username}`).setDisabled(true).setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('admin_panel').setLabel('Painel Admin').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('close_ticket').setLabel('Fechar Ticket').setEmoji('❌').setStyle(ButtonStyle.Danger)
+            )] });
+        }
+
+        if (interaction.customId === 'admin_panel') {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return interaction.reply({ content: '❌ Apenas Administradores!', ephemeral: true });
+            }
+            await interaction.reply({ content: '🛡️ Painel Administrativo do Ticket acessado com sucesso.', ephemeral: true });
+        }
+    }
 });
 
 client.login(process.env.TOKEN);
-
-client.on("messageCreate", async (message) => {
-  if (!message.guild || message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
-
-  // =============================
-  // PAINEL
-  // =============================
-  if (cmd === "painel") {
-    const embed = new EmbedBuilder()
-      .setTitle(config.titulo)
-      .setDescription(config.descricao)
-      .setColor("Gold");
-
-    if (config.thumbnail) embed.setImage(config.thumbnail);
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("select_categoria")
-      .setPlaceholder("Selecione a categoria")
-      .addOptions(
-        config.categorias.map(cat => ({
-          label: cat.nome,
-          description: cat.descricao,
-          value: cat.nome
-        }))
-      );
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({ embeds: [embed], components: [row] });
-  }
-
-  // =============================
-  // HELPALTA
-  // =============================
-  if (cmd === "helpalta") {
-    const helpEmbed = new EmbedBuilder()
-      .setTitle("Comandos - Alta Group")
-      .setColor("Blue")
-      .setDescription(`
-!painel - Enviar painel de atendimento
-!editarpainel titulo <texto>
-!editarpainel descricao <texto>
-!editarpainel thumbnail <url>
-!adicionarcategoria <nome> <descrição>
-!removercategoria <nome>
-!editarcategoria <nome> <nova descrição>
-!helpalta - Ver todos comandos
-      `);
-
-    message.channel.send({ embeds: [helpEmbed] });
-  }
-});
-
-client.on("interactionCreate", async (interaction) => {
-  // =============================
-  // SELECT CATEGORIA
-  // =============================
-  if (interaction.isStringSelectMenu() && interaction.customId === "select_categoria") {
-    const categoria = interaction.values[0];
-
-    if (openTickets.has(interaction.user.id)) {
-      return interaction.reply({ content: "Você já possui um ticket aberto.", ephemeral: true });
-    }
-
-    const modal = new ModalBuilder()
-      .setCustomId(`modal_${categoria}`)
-      .setTitle("Abrir Ticket - Alta Group");
-
-    const assuntoInput = new TextInputBuilder()
-      .setCustomId("assunto")
-      .setLabel("Assunto do Ticket")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const row = new ActionRowBuilder().addComponents(assuntoInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-  }
-
-  // =============================
-  // MODAL ENVIADO
-  // =============================
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("modal_")) {
-    const categoria = interaction.customId.replace("modal_", "");
-    const assunto = interaction.fields.getTextInputValue("assunto");
-
-    config.ticketCount++;
-    saveConfig();
-
-    const ticketId = config.ticketCount;
-    openTickets.set(interaction.user.id, ticketId);
-
-    const channel = await interaction.guild.channels.create({
-      name: `ticket-${ticketId}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        },
-        {
-          id: STAFF_ROLE_ID,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
-        }
-      ]
-    });
-
-    const embed = new EmbedBuilder()
-      .setTitle("Ticket - Alta Group")
-      .setColor("Gold")
-      .setDescription(`
-Categoria: ${categoria}
-ID: ${ticketId}
-Assunto: ${assunto}
-
-Aguarde um membro da equipe responder.
-      `);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("assumir_ticket")
-        .setLabel("Assumir Ticket")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("fechar_ticket")
-        .setLabel("Fechar Ticket")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await channel.send({ embeds: [embed], components: [row] });
-
-    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (logChannel) {
-      logChannel.send(`Ticket ${ticketId} criado por ${interaction.user.tag}`);
-    }
-
-    await interaction.reply({
-      content: `Ticket criado com sucesso: ${channel}`,
-      ephemeral: true
-    });
-  }
-});
-
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const member = await interaction.guild.members.fetch(interaction.user.id);
-  const isStaff = member.roles.cache.has(STAFF_ROLE_ID);
-
-  // =============================
-  // ASSUMIR TICKET
-  // =============================
-  if (interaction.customId === "assumir_ticket") {
-    if (!isStaff) {
-      return interaction.reply({ content: "Apenas a staff pode assumir tickets.", ephemeral: true });
-    }
-
-    await interaction.reply({
-      content: `Ticket assumido por ${interaction.user}`,
-      ephemeral: false
-    });
-
-    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (logChannel) {
-      logChannel.send(`Ticket ${interaction.channel.name} assumido por ${interaction.user.tag}`);
-    }
-  }
-
-  // =============================
-  // FECHAR TICKET
-  // =============================
-  if (interaction.customId === "fechar_ticket") {
-    if (!isStaff) {
-      return interaction.reply({ content: "Apenas a staff pode fechar tickets.", ephemeral: true });
-    }
-
-    await interaction.reply("Ticket será fechado em 5 segundos...");
-
-    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-    if (logChannel) {
-      logChannel.send(`Ticket ${interaction.channel.name} fechado por ${interaction.user.tag}`);
-    }
-
-    setTimeout(() => {
-      interaction.channel.delete().catch(() => {});
-    }, 5000);
-  }
-});
-
-// =============================
-// EDIÇÃO DO PAINEL
-// =============================
-client.on("messageCreate", async (message) => {
-  if (!message.guild || message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
-
-  if (cmd === "editarpainel") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const tipo = args.shift();
-    const texto = args.join(" ");
-
-    if (tipo === "titulo") config.titulo = texto;
-    if (tipo === "descricao") config.descricao = texto;
-    if (tipo === "thumbnail") config.thumbnail = texto;
-
-    saveConfig();
-    message.reply("Painel atualizado com sucesso.");
-  }
-
-  if (cmd === "adicionarcategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.shift();
-    const descricao = args.join(" ");
-    config.categorias.push({ nome, descricao });
-    saveConfig();
-    message.reply("Categoria adicionada.");
-  }
-
-  if (cmd === "removercategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.join(" ");
-    config.categorias = config.categorias.filter(c => c.nome !== nome);
-    saveConfig();
-    message.reply("Categoria removida.");
-  }
-
-  if (cmd === "editarcategoria") {
-    if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-    const nome = args.shift();
-    const novaDesc = args.join(" ");
-
-    const cat = config.categorias.find(c => c.nome === nome);
-    if (!cat) return message.reply("Categoria não encontrada.");
-
-    cat.descricao = novaDesc;
-    saveConfig();
-    message.reply("Categoria atualizada.");
-  }
-});
-
