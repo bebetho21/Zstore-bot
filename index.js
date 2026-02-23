@@ -88,7 +88,7 @@ client.on("messageCreate", async (message) => {
       .setDescription(config.descricao)
       .setColor("Gold");
 
-    if (config.imagem) embed.setImage(config.imagem);
+    if (config.imagem) embed.setThumbnail(config.imagem);
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("select_categoria")
