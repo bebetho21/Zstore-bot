@@ -320,7 +320,7 @@ client.on('interactionCreate', async (interaction) => {
                             { name: "Estrelas", value: "⭐".repeat(parseInt(stars)) },
                             { name: "Comentário", value: m.content }
                         )
-                        .setColor("Yellow")
+                        .setColor("Blue")
                         .setTimestamp();
                     await feedbackChannel.send({ embeds: [embed] });
                     await m.reply("✅ Obrigado pelo feedback!");
