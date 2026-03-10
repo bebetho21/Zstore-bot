@@ -316,7 +316,7 @@ client.on('interactionCreate', async (interaction) => {
                     const embed = new EmbedBuilder()
                         .setTitle("Nova Avaliação")
                         .addFields(
-                            { name: "Usuário", value: `${interaction.user}` }
+                            { name: "Usuário", value: `<@${interaction.user.id}>` }
                             { name: "Estrelas", value: "⭐".repeat(parseInt(stars)) },
                             { name: "Comentário", value: m.content }
                         )
