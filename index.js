@@ -326,55 +326,86 @@ client.on('interactionCreate', async (interaction) => {
                     await m.reply("✅ Obrigado pelo feedback!");
                 }
 
-pix_keys = {}  # guarda as chaves pix dos usuários
+const pixKeys = {};
 
 
-# comando para cadastrar chave
-@bot.command()
-async def cadastrar(ctx, chave):
-    pix_keys[ctx.author.id] = chave
-    await ctx.send("✅ Chave PIX cadastrada com sucesso!")
+client.on("messageCreate", (message) => {
 
+if (message.author.bot) return;
 
-# comando para mostrar pix
-@bot.command()
-async def pix(ctx):
+if (message.content.startsWith("!cadastrar")) {
 
-    if ctx.author.id not in pix_keys:
-        await ctx.send("❌ Você não cadastrou nenhuma chave pix.")
-        return
+const chave = message.content.split(" ").slice(1).join(" ");
 
-    chave = pix_keys[ctx.author.id]
+if (!chave) {
+return message.reply("❌ Digite sua chave pix.\nExemplo: !cadastrar 71999999999");
+}
 
-    canal = discord.utils.get(ctx.guild.text_channels, name="confirmar-pix")
+pixKeys[message.author.id] = chave;
 
-    if canal is None:
-        await ctx.send("❌ Canal confirmar-pix não encontrado.")
-        return
+message.reply("✅ Chave pix cadastrada com sucesso!");
 
-    embed = discord.Embed(
-        title="Pagamento via PIX",
-        description=f"Usuário: {ctx.author.mention}\nChave PIX: `{chave}`",
-        color=discord.Color.green()
+}
+
+});
+
+client.on("messageCreate", async (message) => {
+
+if (message.author.bot) return;
+
+if (message.content === "!pix") {
+
+const chave = pixKeys[message.author.id];
+
+if (!chave) {
+return message.reply("❌ Você não cadastrou nenhuma chave pix.");
+}
+
+const canal = message.guild.channels.cache.find(c => c.name === "confirmar-pix");
+
+if (!canal) return message.reply("Canal confirmar-pix não encontrado.");
+
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
+
+const embed = new EmbedBuilder()
+.setTitle("Pagamento PIX")
+.setDescription(`Usuário: <@${message.author.id}>\nChave: \`${chave}\``)
+.setColor("Green");
+
+const row = new ActionRowBuilder()
+.addComponents(
+new ButtonBuilder()
+.setCustomId("confirmar_pix")
+.setLabel("Confirmar pagamento")
+.setStyle(ButtonStyle.Success),
+
+new ButtonBuilder()
+.setCustomId("nao_recebido")
+.setLabel("Não recebido")
+.setStyle(ButtonStyle.Danger)
+);
+
+canal.send({ embeds: [embed], components: [row] });
+
+}
+
+});}
+
     )
 
-    botao_confirmar = Button(label="Confirmar pagamento", style=discord.ButtonStyle.green)
-    botao_nao = Button(label="Não recebido", style=discord.ButtonStyle.red)
+    client.on("interactionCreate", async (interaction) => {
 
-    async def confirmar(interaction):
-        await interaction.response.send_message("✅ Pagamento confirmado!", ephemeral=True)
+if (!interaction.isButton()) return;
 
-    async def nao_recebido(interaction):
-        await interaction.response.send_message("❌ Pagamento não recebido.", ephemeral=True)
+if (interaction.customId === "confirmar_pix") {
+await interaction.reply({ content: "✅ Pagamento confirmado!", ephemeral: true });
+}
 
-    botao_confirmar.callback = confirmar
-    botao_nao.callback = nao_recebido
+if (interaction.customId === "nao_recebido") {
+await interaction.reply({ content: "❌ Pagamento não recebido.", ephemeral: true });
+}
 
-    view = View()
-    view.add_item(botao_confirmar)
-    view.add_item(botao_nao)
-
-    await canal.send(embed=embed, view=view)
+});
 
                 }
             });
