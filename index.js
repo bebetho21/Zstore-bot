@@ -279,9 +279,9 @@ client.on('interactionCreate', async (interaction) => {
             });
 
             const embed = new EmbedBuilder()
-                .setTitle("Novo Pedido")
-                .setDescription(`Usuário: ${interaction.user}\nProduto: ${interaction.message.embeds[0].title}\nVariação: ${selected}\n\nAguarde um ADM responder.`)
-                .setColor("Green");
+                .setTitle("📦 Novo Pedido")
+                .setDescription(`Usuário: ${interaction.user}\nProduto: ${interaction.message.embeds[0].title}\nVariação: ${selected}\n\n⏳ Aguarde um ADM responder.`)
+                .setColor("´Blue");
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fechar Ticket').setStyle(ButtonStyle.Danger)
